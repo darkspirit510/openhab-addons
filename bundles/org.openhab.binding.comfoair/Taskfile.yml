@@ -1,0 +1,10 @@
+# https://taskfile.dev
+
+version: '3'
+
+tasks:
+  protoc:
+    cmds:
+      - protoc --java_out=src/main/java --proto_path=src/main/proto/ src/main/proto/zehnder.proto
+      - protoc --java_out=src/main/java --proto_path=src/main/proto/ src/main/proto/nanopb.proto
+    silent: true
