@@ -18,4 +18,13 @@
 			<default>60</default>
 		</parameter>
 	</config-description>
+
+	<config-description uri="thing-type:comfoair:comfoconnect">
+		<parameter name="host" type="text" required="true">
+			<label>Hostname / IP</label>
+			<context>host</context>
+			<limitToOptions>false</limitToOptions>
+			<description>Hostname / IP of the ComfoConnect LAN Gateway</description>
+		</parameter>
+	</config-description>
 </config-description:config-descriptions>

@@ -10,11 +10,11 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  */
-package org.openhab.binding.comfoair.internal.datatypes;
+package org.openhab.binding.comfoair.internal.comfoair.datatypes;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
-import org.openhab.binding.comfoair.internal.ComfoAirCommandType;
+import org.openhab.binding.comfoair.internal.comfoair.ComfoAirCommandType;
 import org.openhab.core.types.State;
 
 /**

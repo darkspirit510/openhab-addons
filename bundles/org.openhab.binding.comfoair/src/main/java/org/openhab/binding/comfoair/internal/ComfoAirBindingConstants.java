@@ -30,9 +30,10 @@ public class ComfoAirBindingConstants {
 
     public static final ThingTypeUID THING_TYPE_COMFOAIR_GENERIC = new ThingTypeUID(BINDING_ID, "comfoair");
     public static final ThingTypeUID THING_TYPE_COMFOAIR_WHR930 = new ThingTypeUID(BINDING_ID, "WHR930");
+    public static final ThingTypeUID THING_TYPE_COMFOAIR_COMFOCONNECT = new ThingTypeUID(BINDING_ID, "comfoconnect");
 
     public static final Set<ThingTypeUID> SUPPORTED_THING_TYPES_UIDS = Set.of(THING_TYPE_COMFOAIR_GENERIC,
-            THING_TYPE_COMFOAIR_WHR930);
+            THING_TYPE_COMFOAIR_WHR930, THING_TYPE_COMFOAIR_COMFOCONNECT);
 
     // Thing properties
     public static final String PROPERTY_SOFTWARE_MAIN_VERSION = "SOFTWARE_VERSION_MAIN";

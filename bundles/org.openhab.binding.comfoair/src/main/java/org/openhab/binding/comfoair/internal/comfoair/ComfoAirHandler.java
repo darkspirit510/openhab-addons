@@ -10,7 +10,7 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  */
-package org.openhab.binding.comfoair.internal;
+package org.openhab.binding.comfoair.internal.comfoair;
 
 import java.util.Collection;
 import java.util.List;
@@ -22,7 +22,8 @@ import java.util.stream.Collectors;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
-import org.openhab.binding.comfoair.internal.datatypes.ComfoAirDataType;
+import org.openhab.binding.comfoair.internal.ComfoAirBindingConstants;
+import org.openhab.binding.comfoair.internal.comfoair.datatypes.ComfoAirDataType;
 import org.openhab.core.io.transport.serial.SerialPortManager;
 import org.openhab.core.library.types.OnOffType;
 import org.openhab.core.thing.Channel;
@@ -109,9 +110,8 @@ public class ComfoAirHandler extends BaseThingHandler {
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "Serial port is not configured.");
             return;
         } else {
-            ComfoAirSerialConnector comfoAirConnector = new ComfoAirSerialConnector(serialPortManager, serialPort,
+            this.comfoAirConnector = new ComfoAirSerialConnector(serialPortManager, serialPort,
                     BAUDRATE);
-            this.comfoAirConnector = comfoAirConnector;
         }
         updateStatus(ThingStatus.UNKNOWN);
         scheduler.submit(this::connect);

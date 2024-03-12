@@ -14,6 +14,8 @@ package org.openhab.binding.comfoair.internal;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
+import org.openhab.binding.comfoair.internal.comfoair.ComfoAirHandler;
+import org.openhab.binding.comfoair.internal.comfoconnect.ComfoConnectHandler;
 import org.openhab.core.io.transport.serial.SerialPortManager;
 import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingTypeUID;
@@ -56,6 +58,8 @@ public class ComfoAirHandlerFactory extends BaseThingHandlerFactory {
         if (ComfoAirBindingConstants.THING_TYPE_COMFOAIR_GENERIC.equals(thingTypeUID)
                 || ComfoAirBindingConstants.THING_TYPE_COMFOAIR_WHR930.equals(thingTypeUID)) {
             return new ComfoAirHandler(thing, serialPortManager);
+        } else if (ComfoAirBindingConstants.THING_TYPE_COMFOAIR_COMFOCONNECT.equals(thingTypeUID)) {
+            return new ComfoConnectHandler(thing);
         }
 
         return null;

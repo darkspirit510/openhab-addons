@@ -10,7 +10,7 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  */
-package org.openhab.binding.comfoair.internal;
+package org.openhab.binding.comfoair.internal.comfoair;
 
 import java.io.BufferedInputStream;
 import java.io.DataInputStream;

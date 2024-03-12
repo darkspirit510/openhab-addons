@@ -10,7 +10,7 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  */
-package org.openhab.binding.comfoair.internal;
+package org.openhab.binding.comfoair.internal.comfoair;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -21,14 +21,15 @@ import java.util.Set;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
-import org.openhab.binding.comfoair.internal.datatypes.ComfoAirDataType;
-import org.openhab.binding.comfoair.internal.datatypes.DataTypeBoolean;
-import org.openhab.binding.comfoair.internal.datatypes.DataTypeMessage;
-import org.openhab.binding.comfoair.internal.datatypes.DataTypeNumber;
-import org.openhab.binding.comfoair.internal.datatypes.DataTypeRPM;
-import org.openhab.binding.comfoair.internal.datatypes.DataTypeTemperature;
-import org.openhab.binding.comfoair.internal.datatypes.DataTypeTime;
-import org.openhab.binding.comfoair.internal.datatypes.DataTypeVolt;
+import org.openhab.binding.comfoair.internal.ComfoAirBindingConstants;
+import org.openhab.binding.comfoair.internal.comfoair.datatypes.ComfoAirDataType;
+import org.openhab.binding.comfoair.internal.comfoair.datatypes.DataTypeBoolean;
+import org.openhab.binding.comfoair.internal.comfoair.datatypes.DataTypeMessage;
+import org.openhab.binding.comfoair.internal.comfoair.datatypes.DataTypeNumber;
+import org.openhab.binding.comfoair.internal.comfoair.datatypes.DataTypeRPM;
+import org.openhab.binding.comfoair.internal.comfoair.datatypes.DataTypeTemperature;
+import org.openhab.binding.comfoair.internal.comfoair.datatypes.DataTypeTime;
+import org.openhab.binding.comfoair.internal.comfoair.datatypes.DataTypeVolt;
 import org.openhab.core.library.types.DecimalType;
 import org.openhab.core.types.Command;
 import org.openhab.core.types.State;
