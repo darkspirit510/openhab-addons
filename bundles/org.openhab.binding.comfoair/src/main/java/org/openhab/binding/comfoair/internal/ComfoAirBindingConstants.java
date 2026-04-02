@@ -22,17 +22,24 @@ import org.openhab.core.thing.ThingTypeUID;
  * used across the whole binding.
  *
  * @author Hans Böhm - Initial contribution
+ * @author Sascha Knoop - Add ComfoConnect
  */
 @NonNullByDefault
 public class ComfoAirBindingConstants {
 
     private static final String BINDING_ID = "comfoair";
 
+    // Legacy ComfoAir (serial) thing types
     public static final ThingTypeUID THING_TYPE_COMFOAIR_GENERIC = new ThingTypeUID(BINDING_ID, "comfoair");
     public static final ThingTypeUID THING_TYPE_COMFOAIR_WHR930 = new ThingTypeUID(BINDING_ID, "WHR930");
 
+    // ComfoConnect (TCP) bridge and device types
+    public static final ThingTypeUID THING_TYPE_COMFOCONNECT_TCP_BRIDGE = new ThingTypeUID(BINDING_ID,
+            "comfoconnect-tcp");
+    public static final ThingTypeUID THING_TYPE_COMFOCONNECT_NODE = new ThingTypeUID(BINDING_ID, "comfoconnect-node");
+
     public static final Set<ThingTypeUID> SUPPORTED_THING_TYPES_UIDS = Set.of(THING_TYPE_COMFOAIR_GENERIC,
-            THING_TYPE_COMFOAIR_WHR930);
+            THING_TYPE_COMFOAIR_WHR930, THING_TYPE_COMFOCONNECT_TCP_BRIDGE, THING_TYPE_COMFOCONNECT_NODE);
 
     // Thing properties
     public static final String PROPERTY_SOFTWARE_MAIN_VERSION = "SOFTWARE_VERSION_MAIN";

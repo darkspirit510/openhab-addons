@@ -18,4 +18,37 @@
 			<default>60</default>
 		</parameter>
 	</config-description>
+
+	<config-description uri="thing-type:comfoair:comfoconnect-tcp">
+		<parameter name="hostname" type="text" required="true">
+			<label>Gateway Hostname/IP</label>
+			<description>Hostname or IP address of the ComfoConnect gateway</description>
+		</parameter>
+		<parameter name="port" type="integer" min="1" max="65535" required="true">
+			<label>Gateway Port</label>
+			<description>TCP port for the ComfoConnect gateway (typically 56747)</description>
+			<default>56747</default>
+		</parameter>
+		<parameter name="pin" type="text" required="true">
+			<label>PIN Code</label>
+			<description>Numeric PIN for gateway authentication</description>
+		</parameter>
+		<parameter name="refreshInterval" type="integer" min="10" max="65535" unit="s" required="false">
+			<label>Refresh Interval</label>
+			<description>Refresh interval in seconds for device state updates</description>
+			<default>30</default>
+		</parameter>
+	</config-description>
+
+	<config-description uri="thing-type:comfoair:comfoconnect-node">
+		<parameter name="nodeId" type="integer" min="0" max="255" required="true">
+			<label>Node ID</label>
+			<description>ComfoConnect node ID assigned by the gateway</description>
+		</parameter>
+		<parameter name="refreshInterval" type="integer" min="10" max="65535" unit="s" required="false">
+			<label>Refresh Interval</label>
+			<description>Refresh interval in seconds for device state updates</description>
+			<default>30</default>
+		</parameter>
+	</config-description>
 </config-description:config-descriptions>

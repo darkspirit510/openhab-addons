@@ -14,7 +14,10 @@ package org.openhab.binding.comfoair.internal;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
+import org.openhab.binding.comfoair.internal.comfoconnect.ComfoConnectBridgeHandler;
+import org.openhab.binding.comfoair.internal.comfoconnect.ComfoConnectDeviceHandler;
 import org.openhab.core.io.transport.serial.SerialPortManager;
+import org.openhab.core.thing.Bridge;
 import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingTypeUID;
 import org.openhab.core.thing.binding.BaseThingHandlerFactory;
@@ -28,6 +31,7 @@ import org.osgi.service.component.annotations.Reference;
  * handlers.
  *
  * @author Hans Böhm - Initial contribution
+ * @author Sascha Knoop - Add ComfoConnect
  */
 @NonNullByDefault
 @Component(configurationPid = "binding.comfoair", service = ThingHandlerFactory.class)
@@ -53,9 +57,20 @@ public class ComfoAirHandlerFactory extends BaseThingHandlerFactory {
     protected @Nullable ThingHandler createHandler(Thing thing) {
         ThingTypeUID thingTypeUID = thing.getThingTypeUID();
 
+        // Legacy ComfoAir (serial) device handlers
         if (ComfoAirBindingConstants.THING_TYPE_COMFOAIR_GENERIC.equals(thingTypeUID)
                 || ComfoAirBindingConstants.THING_TYPE_COMFOAIR_WHR930.equals(thingTypeUID)) {
             return new ComfoAirHandler(thing, serialPortManager);
+        }
+
+        // ComfoConnect TCP bridge handler
+        if (ComfoAirBindingConstants.THING_TYPE_COMFOCONNECT_TCP_BRIDGE.equals(thingTypeUID)) {
+            return new ComfoConnectBridgeHandler((Bridge) thing);
+        }
+
+        // ComfoConnect device handler
+        if (ComfoAirBindingConstants.THING_TYPE_COMFOCONNECT_NODE.equals(thingTypeUID)) {
+            return new ComfoConnectDeviceHandler(thing);
         }
 
         return null;

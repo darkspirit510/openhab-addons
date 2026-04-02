@@ -10,7 +10,7 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  */
-package org.openhab.binding.comfoair.internal;
+package org.openhab.binding.comfoair.internal.comfoair;
 
 import java.io.BufferedInputStream;
 import java.io.DataInputStream;
@@ -22,6 +22,8 @@ import java.util.Arrays;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
+import org.openhab.binding.comfoair.internal.ComfoAirCommand;
+import org.openhab.binding.comfoair.internal.ComfoAirCommandType;
 import org.openhab.core.io.transport.serial.PortInUseException;
 import org.openhab.core.io.transport.serial.SerialPort;
 import org.openhab.core.io.transport.serial.SerialPortIdentifier;

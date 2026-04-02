@@ -22,6 +22,8 @@ import java.util.stream.Collectors;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
+import org.openhab.binding.comfoair.internal.comfoair.ComfoAirSerialConnector;
+import org.openhab.binding.comfoair.internal.comfoair.ComfoAirSerialException;
 import org.openhab.binding.comfoair.internal.datatypes.ComfoAirDataType;
 import org.openhab.core.io.transport.serial.SerialPortManager;
 import org.openhab.core.library.types.OnOffType;
@@ -43,6 +45,7 @@ import org.slf4j.LoggerFactory;
  * sent to one of the channels.
  *
  * @author Hans Böhm - Initial contribution
+ * @author Sascha Knoop - Add ComfoConnect
  */
 @NonNullByDefault
 public class ComfoAirHandler extends BaseThingHandler {
