@@ -63,8 +63,8 @@ public class ComfoAirHandlerFactory extends BaseThingHandlerFactory {
             return new ComfoAirHandler(thing, serialPortManager);
         }
 
-        // ComfoConnect TCP bridge handler
-        if (ComfoAirBindingConstants.THING_TYPE_COMFOCONNECT_TCP_BRIDGE.equals(thingTypeUID)) {
+        // ComfoConnect LAN bridge handler
+        if (ComfoAirBindingConstants.THING_TYPE_COMFOCONNECT_LAN_BRIDGE.equals(thingTypeUID)) {
             return new ComfoConnectBridgeHandler((Bridge) thing);
         }
 

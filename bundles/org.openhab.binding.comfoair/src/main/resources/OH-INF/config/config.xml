@@ -19,7 +19,7 @@
 		</parameter>
 	</config-description>
 
-	<config-description uri="thing-type:comfoair:comfoconnect-tcp">
+	<config-description uri="thing-type:comfoair:comfoconnect-lan">
 		<parameter name="hostname" type="text" required="true">
 			<label>Gateway Hostname/IP</label>
 			<description>Hostname or IP address of the ComfoConnect gateway</description>
@@ -33,10 +33,19 @@
 			<label>PIN Code</label>
 			<description>Numeric PIN for gateway authentication</description>
 		</parameter>
+		<parameter name="clientUuid" type="text" required="false">
+			<label>Client UUID</label>
+			<description>Custom UUID for app registration (optional, uses default if not provided)</description>
+		</parameter>
 		<parameter name="refreshInterval" type="integer" min="10" max="65535" unit="s" required="false">
 			<label>Refresh Interval</label>
 			<description>Refresh interval in seconds for device state updates</description>
 			<default>30</default>
+		</parameter>
+		<parameter name="autoTakeover" type="boolean" required="false">
+			<label>Auto Takeover Session</label>
+			<description>Automatically take over existing session if another app is logged in</description>
+			<default>false</default>
 		</parameter>
 	</config-description>
 

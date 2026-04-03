@@ -47,4 +47,9 @@ public class ComfoConnectConfiguration {
      * Device refresh interval in seconds.
      */
     public int refreshInterval = 30;
+
+    /**
+     * Whether to automatically take over an existing session if another app is logged in.
+     */
+    public boolean autoTakeover = false;
 }

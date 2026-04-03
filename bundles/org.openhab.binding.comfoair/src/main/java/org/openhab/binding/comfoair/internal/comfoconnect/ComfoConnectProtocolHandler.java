@@ -13,7 +13,10 @@
 package org.openhab.binding.comfoair.internal.comfoconnect;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ScheduledExecutorService;
@@ -26,8 +29,10 @@ import org.eclipse.jdt.annotation.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.protobuf.MessageLite;
 import com.zehnder.proto.Zehnder;
 import com.zehnder.proto.Zehnder.GatewayOperation;
+import com.zehnder.proto.Zehnder.GatewayOperation.GatewayResult;
 
 /**
  * Handles ComfoConnect protocol state machine: authentication, session management, and message correlation.
@@ -53,6 +58,7 @@ public class ComfoConnectProtocolHandler {
     private final ComfoConnectConnector connector;
     private final ScheduledExecutorService scheduler;
     private final int pinCode;
+    private final boolean autoTakeover;
 
     private volatile boolean sessionActive = false;
     private volatile int nextReference = 1;
@@ -85,17 +91,19 @@ public class ComfoConnectProtocolHandler {
      *
      * @param connector the underlying TCP connector
      * @param pinCode the PIN for gateway registration
+     * @param autoTakeover whether to automatically take over existing sessions
      * @param scheduler executor for async tasks and keep-alive
      */
     public ComfoConnectProtocolHandler(final ComfoConnectConnector connector, final int pinCode,
-            final ScheduledExecutorService scheduler) {
+            final boolean autoTakeover, final ScheduledExecutorService scheduler) {
         this.connector = connector;
         this.pinCode = pinCode;
+        this.autoTakeover = autoTakeover;
         this.scheduler = scheduler;
     }
 
     /**
-     * Initialize the protocol: register and start session.
+     * Initialize the protocol: register (if needed) and start session.
      * This must be called after the TCP connection is established.
      *
      * @throws IOException if registration or session start fails
@@ -105,13 +113,8 @@ public class ComfoConnectProtocolHandler {
     public void initialize() throws IOException, InterruptedException, TimeoutException {
         logger.debug("Initializing ComfoConnect protocol");
 
-        // Register app with PIN
-        registerApp();
-
-        // Start session
+        registerAppIfNeeded();
         startSession();
-
-        // Start keep-alive timer
         startKeepAliveTimer();
 
         sessionActive = true;
@@ -237,8 +240,9 @@ public class ComfoConnectProtocolHandler {
                 case RegisterAppConfirmType:
                 case StartSessionConfirmType:
                 case CloseSessionConfirmType:
+                case ListRegisteredAppsConfirmType:
                     if (operation.getReference() > 0) {
-                        completeRequest(operation.getReference(), parsed.payload);
+                        completeRequest(operation.getReference(), parsed.payload, operation.getResult());
                     }
                     break;
 
@@ -251,7 +255,7 @@ public class ComfoConnectProtocolHandler {
                 default:
                     // Other async responses (CnRmiAsyncResponse, etc.)
                     if (operation.getReference() > 0) {
-                        completeRequest(operation.getReference(), parsed.payload);
+                        completeRequest(operation.getReference(), parsed.payload, operation.getResult());
                     }
 
                     break;
@@ -263,9 +267,71 @@ public class ComfoConnectProtocolHandler {
     }
 
     /**
-     * Register the app with the gateway using PIN.
+     * Check if app is already registered, register if needed with retry on PIN failure.
      *
      * @throws IOException if registration fails
+     * @throws TimeoutException if timeout occurs
+     * @throws InterruptedException if interrupted
+     */
+    private void registerAppIfNeeded() throws IOException, TimeoutException, InterruptedException {
+        logger.debug("Checking if app is already registered");
+
+        try {
+            List<String> registeredUuids = listRegisteredApps();
+            java.util.UUID clientUuid = connector.getClientUuid();
+
+            if (registeredUuids.contains(clientUuid.toString())) {
+                logger.info("App {} is already registered", clientUuid);
+                return;
+            }
+
+            logger.debug("App {} is not registered, registering now", clientUuid);
+            registerApp();
+
+        } catch (IOException e) {
+            // If listRegisteredApps fails, try to register anyway (gateway might not support list command)
+            logger.debug("Failed to check registered apps ({}), attempting registration", e.getMessage());
+            registerApp();
+        }
+    }
+
+    /**
+     * List all registered app UUIDs from the gateway.
+     *
+     * @return list of UUID strings
+     * @throws IOException if request fails
+     * @throws TimeoutException if timeout occurs
+     * @throws InterruptedException if interrupted
+     */
+    private List<String> listRegisteredApps() throws IOException, TimeoutException, InterruptedException {
+        logger.debug("Requesting list of registered apps");
+
+        Zehnder.ListRegisteredAppsRequest.Builder builder = Zehnder.ListRegisteredAppsRequest.newBuilder();
+
+        byte[] response = sendRequestSync(builder.build(), byte[].class, REQUEST_TIMEOUT_SEC);
+
+        // Parse the ListRegisteredAppsConfirm response
+        List<String> uuids = new ArrayList<>();
+        try {
+            Zehnder.ListRegisteredAppsConfirm confirm = Zehnder.ListRegisteredAppsConfirm.parseFrom(response);
+            for (Zehnder.ListRegisteredAppsConfirm.App app : confirm.getAppsList()) {
+                java.util.UUID registeredUuid = bytesToUuid(app.getUuid().toByteArray());
+                uuids.add(registeredUuid.toString());
+                logger.trace("Found registered app: {} ({})", registeredUuid, app.getDevicename());
+            }
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+            logger.warn("Failed to parse ListRegisteredAppsConfirm: {}", e.getMessage());
+            throw new IOException("Failed to parse registered apps response", e);
+        }
+
+        logger.debug("Found {} registered apps", uuids.size());
+        return uuids;
+    }
+
+    /**
+     * Register the app with the gateway using PIN.
+     *
+     * @throws IOException if registration fails (e.g., invalid PIN)
      * @throws TimeoutException if timeout occurs
      * @throws InterruptedException if interrupted
      */
@@ -277,25 +343,29 @@ public class ComfoConnectProtocolHandler {
         builder.setPin(pinCode);
         builder.setDevicename("openHAB");
 
+        // sendRequestSync will wait for response with potential error from GatewayOperation
+        // If gateway returns NOT_ALLOWED result, it will be caught as an error
         sendRequestSync(builder.build(), byte[].class, REQUEST_TIMEOUT_SEC);
-        logger.debug("App registered successfully");
+        logger.info("App registered successfully with UUID: {}", connector.getClientUuid());
     }
 
     /**
-     * Start a session with the gateway.
+     * Start a session with the gateway, with optional takeover of existing sessions.
      *
-     * @throws IOException if start fails
+     * @throws IOException if start fails or session conflict exists
      * @throws TimeoutException if timeout occurs
      * @throws InterruptedException if interrupted
      */
     private void startSession() throws IOException, TimeoutException, InterruptedException {
-        logger.debug("Starting session with gateway");
+        logger.debug("Starting session with gateway (autoTakeover={})", autoTakeover);
 
         Zehnder.StartSessionRequest.Builder builder = Zehnder.StartSessionRequest.newBuilder();
-        builder.setTakeover(false);
+        builder.setTakeover(autoTakeover);
 
+        // sendRequestSync will raise an exception if the gateway returns an error result
+        // For OTHER_SESSION result, we either allow it (if autoTakeover=true) or fail
         sendRequestSync(builder.build(), byte[].class, REQUEST_TIMEOUT_SEC);
-        logger.debug("Session started successfully");
+        logger.info("Session started successfully");
     }
 
     /**
@@ -324,6 +394,7 @@ public class ComfoConnectProtocolHandler {
      */
     private void startKeepAliveTimer() {
         logger.debug("Starting keep-alive timer");
+
         keepAliveTask = scheduler.scheduleAtFixedRate(this::sendKeepAlive, KEEPALIVE_INTERVAL_SEC,
                 KEEPALIVE_INTERVAL_SEC, TimeUnit.SECONDS);
     }
@@ -373,9 +444,11 @@ public class ComfoConnectProtocolHandler {
      *
      * @param reference the request reference
      * @param payload the response payload bytes
+     * @param result the gateway result from the operation
      */
-    private void completeRequest(final int reference, final byte[] payload) {
+    private void completeRequest(final int reference, final byte[] payload, final GatewayResult result) {
         PendingRequest<?> pending;
+
         synchronized (pendingRequests) {
             pending = pendingRequests.remove(reference);
         }
@@ -386,6 +459,13 @@ public class ComfoConnectProtocolHandler {
         }
 
         try {
+            // Check for gateway errors first
+            if (result != GatewayResult.OK) {
+                String errorMsg = getErrorMessageForResult(result);
+                pending.future.completeExceptionally(new IOException(errorMsg));
+                return;
+            }
+
             // Parse response based on expected type
             Object response = parseResponse(pending.responseClass, payload);
             @SuppressWarnings("unchecked")
@@ -397,12 +477,33 @@ public class ComfoConnectProtocolHandler {
     }
 
     /**
+     * Get a human-readable error message for a gateway result.
+     *
+     * @param result the gateway result
+     * @return error message
+     */
+    private String getErrorMessageForResult(final GatewayResult result) {
+        return switch (result) {
+            case OK -> "No error";
+            case BAD_REQUEST -> "Gateway error: BAD_REQUEST (something wrong with the request)";
+            case INTERNAL_ERROR -> "Gateway error: INTERNAL_ERROR (request was OK but handling failed)";
+            case NOT_REACHABLE -> "Gateway error: NOT_REACHABLE (backend cannot route the request)";
+            case OTHER_SESSION -> "Gateway error: OTHER_SESSION (another session already active)";
+            case NOT_ALLOWED -> "Gateway error: NOT_ALLOWED (invalid PIN or permission denied)";
+            case NO_RESOURCES -> "Gateway error: NO_RESOURCES (not enough memory)";
+            case NOT_EXIST -> "Gateway error: NOT_EXIST (ComfoNet node or property does not exist)";
+            case RMI_ERROR -> "Gateway error: RMI_ERROR (RMI communication failed)";
+        };
+    }
+
+    /**
      * Handle a request timeout.
      *
      * @param reference the request reference that timed out
      */
     private void handleRequestTimeout(final int reference) {
         PendingRequest<?> pending;
+
         synchronized (pendingRequests) {
             pending = pendingRequests.remove(reference);
         }
@@ -433,6 +534,7 @@ public class ComfoConnectProtocolHandler {
             for (PendingRequest<?> pending : pendingRequests.values()) {
                 pending.future.completeExceptionally(new IOException("Protocol handler shut down"));
             }
+
             pendingRequests.clear();
         }
     }
@@ -448,6 +550,7 @@ public class ComfoConnectProtocolHandler {
         if (responseClass == byte[].class) {
             return payload;
         }
+
         throw new IOException("Unknown response type: " + responseClass.getName());
     }
 
@@ -457,13 +560,15 @@ public class ComfoConnectProtocolHandler {
      * @param builder the GatewayOperation builder
      * @param request the request message
      */
-    private void setOperationType(final GatewayOperation.Builder builder,
-            final com.google.protobuf.MessageLite request) {
+    private void setOperationType(final GatewayOperation.Builder builder, final MessageLite request) {
         String requestType = request.getClass().getSimpleName();
+
         if (requestType.contains("RegisterApp")) {
             builder.setType(GatewayOperation.OperationType.RegisterAppRequestType);
         } else if (requestType.contains("StartSession")) {
             builder.setType(GatewayOperation.OperationType.StartSessionRequestType);
+        } else if (requestType.contains("ListRegisteredApps")) {
+            builder.setType(GatewayOperation.OperationType.ListRegisteredAppsRequestType);
         } else if (requestType.contains("KeepAlive")) {
             builder.setType(GatewayOperation.OperationType.KeepAliveType);
         }
@@ -478,8 +583,22 @@ public class ComfoConnectProtocolHandler {
      */
     private byte[] uuidToBytes(final java.util.UUID uuid) {
         byte[] bytes = new byte[16];
-        java.nio.ByteBuffer.wrap(bytes).putLong(uuid.getMostSignificantBits()).putLong(uuid.getLeastSignificantBits());
+        ByteBuffer.wrap(bytes).putLong(uuid.getMostSignificantBits()).putLong(uuid.getLeastSignificantBits());
         return bytes;
+    }
+
+    /**
+     * Convert bytes to UUID.
+     *
+     * @param bytes the 16 bytes
+     * @return UUID object
+     */
+    private java.util.UUID bytesToUuid(final byte[] bytes) {
+        ByteBuffer bb = ByteBuffer.wrap(bytes);
+        long high = bb.getLong();
+        long low = bb.getLong();
+
+        return new java.util.UUID(high, low);
     }
 
     public boolean isSessionActive() {

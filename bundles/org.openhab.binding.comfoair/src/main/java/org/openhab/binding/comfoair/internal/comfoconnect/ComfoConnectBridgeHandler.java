@@ -20,6 +20,7 @@ import java.util.concurrent.TimeUnit;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
+import org.openhab.binding.comfoair.internal.ComfoAirBindingConstants;
 import org.openhab.core.thing.Bridge;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.ThingStatus;
@@ -92,7 +93,22 @@ public class ComfoConnectBridgeHandler extends BaseBridgeHandler {
         String hostname = Objects.requireNonNull(config.hostname);
         String pin = Objects.requireNonNull(config.pin);
 
-        UUID clientUuid = UUID.nameUUIDFromBytes(("comfoair-client-" + getThing().getUID().toString()).getBytes());
+        // Use configured clientUuid or default from constant
+        UUID clientUuid;
+        if (config.clientUuid != null && !config.clientUuid.isEmpty()) {
+            try {
+                clientUuid = UUID.fromString(Objects.requireNonNull(config.clientUuid));
+                logger.debug("Using configured client UUID: {}", clientUuid);
+            } catch (IllegalArgumentException e) {
+                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
+                        "Invalid client UUID format: " + e.getMessage());
+                return;
+            }
+        } else {
+            clientUuid = UUID.fromString(ComfoAirBindingConstants.COMFOCONNECT_DEFAULT_CLIENT_UUID);
+            logger.debug("Using default client UUID: {}", clientUuid);
+        }
+
         UUID gatewayUuid = UUID.nameUUIDFromBytes(("comfoair-gateway-" + hostname + ":" + config.port).getBytes());
 
         ComfoConnectTcpConnector connector = new ComfoConnectTcpConnector(hostname, config.port, clientUuid,
@@ -108,7 +124,8 @@ public class ComfoConnectBridgeHandler extends BaseBridgeHandler {
             return;
         }
 
-        ComfoConnectProtocolHandler protocolHandler = new ComfoConnectProtocolHandler(connector, pinCode, scheduler);
+        ComfoConnectProtocolHandler protocolHandler = new ComfoConnectProtocolHandler(connector, pinCode,
+                config.autoTakeover, scheduler);
         this.protocolHandler = protocolHandler;
 
         scheduler.submit(this::connect);
@@ -142,9 +159,28 @@ public class ComfoConnectBridgeHandler extends BaseBridgeHandler {
                 task.cancel(true);
                 connectionRetryTask = null;
             }
-        } catch (InterruptedException | java.util.concurrent.TimeoutException | IOException e) {
-            logger.warn("Failed to connect or authenticate with gateway: {}", e.getMessage());
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
+        } catch (InterruptedException e) {
+            logger.warn("Connection attempt interrupted: {}", e.getMessage());
+            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, "Connection interrupted");
+            scheduleReconnectAttempt();
+        } catch (java.util.concurrent.TimeoutException e) {
+            logger.warn("Connection timeout: {}", e.getMessage());
+            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, "Connection timeout");
+            scheduleReconnectAttempt();
+        } catch (IOException e) {
+            String errorMsg = e.getMessage();
+            ThingStatusDetail detail = ThingStatusDetail.COMMUNICATION_ERROR;
+
+            // Provide more specific error messages
+            if (errorMsg != null && errorMsg.contains("Invalid PIN")) {
+                detail = ThingStatusDetail.CONFIGURATION_ERROR;
+                errorMsg = "Invalid PIN code (NOT_ALLOWED)";
+            } else if (errorMsg != null && errorMsg.contains("Another app is already logged in")) {
+                detail = ThingStatusDetail.CONFIGURATION_ERROR;
+            }
+
+            logger.warn("Failed to connect or authenticate with gateway: {}", errorMsg);
+            updateStatus(ThingStatus.OFFLINE, detail, errorMsg);
             scheduleReconnectAttempt();
         }
     }
