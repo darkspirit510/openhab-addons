@@ -327,13 +327,24 @@ public class ComfoConnectProtocolHandler {
      * @throws InterruptedException if interrupted
      */
     private void registerAppIfNeeded() throws IOException, TimeoutException, InterruptedException {
-        logger.debug("Attempting to register app with gateway");
+        logger.debug("Checking if app registration is needed");
 
         try {
+            // Get list of already registered apps
+            List<String> registeredApps = listRegisteredApps();
+            String clientUuid = connector.getClientUuid().toString();
+
+            if (registeredApps.contains(clientUuid)) {
+                logger.debug("App already registered with UUID: {}", clientUuid);
+                return;
+            }
+
+            logger.debug("App not yet registered, attempting registration");
             registerApp();
         } catch (IOException e) {
-            // If registration fails with "already registered" or similar error, that's OK
-            logger.debug("Registration failed ({}), assuming already registered or not needed", e.getMessage());
+            // If listing registered apps fails, attempt registration as fallback
+            logger.debug("Failed to list registered apps ({}), attempting registration anyway", e.getMessage());
+            registerApp(); // Will throw IOException if fails, causing initialization to fail
         }
     }
 
