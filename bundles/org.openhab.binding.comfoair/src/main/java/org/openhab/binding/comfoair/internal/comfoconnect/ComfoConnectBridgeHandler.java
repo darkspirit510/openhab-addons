@@ -13,8 +13,13 @@
 package org.openhab.binding.comfoair.internal.comfoconnect;
 
 import java.io.IOException;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.InetAddress;
+import java.net.SocketTimeoutException;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -29,6 +34,8 @@ import org.openhab.core.thing.binding.BaseBridgeHandler;
 import org.openhab.core.types.Command;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.zehnder.proto.Zehnder;
 
 /**
  * Bridge handler for ComfoConnect LAN gateway devices (newer Q-series).
@@ -50,6 +57,7 @@ public class ComfoConnectBridgeHandler extends BaseBridgeHandler {
     private @Nullable ComfoConnectTcpConnector connector;
     private @Nullable ComfoConnectProtocolHandler protocolHandler;
     private @Nullable ScheduledFuture<?> connectionRetryTask;
+    private @Nullable Future<?> messageConsumerTask;
 
     /**
      * Create a new ComfoConnect bridge handler.
@@ -77,20 +85,9 @@ public class ComfoConnectBridgeHandler extends BaseBridgeHandler {
             return;
         }
 
-        if (config.port <= 0) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "Gateway port is not configured");
-            return;
-        }
-
-        if (config.pin == null || config.pin.isEmpty()) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "Gateway PIN is not configured");
-            return;
-        }
-
         updateStatus(ThingStatus.UNKNOWN);
 
         String hostname = Objects.requireNonNull(config.hostname);
-        String pin = Objects.requireNonNull(config.pin);
 
         // Use configured clientUuid or default from constant
         UUID clientUuid;
@@ -99,28 +96,59 @@ public class ComfoConnectBridgeHandler extends BaseBridgeHandler {
                 clientUuid = UUID.fromString(Objects.requireNonNull(config.clientUuid));
                 logger.debug("Using configured client UUID: {}", clientUuid);
             } catch (IllegalArgumentException e) {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                        "Invalid client UUID format: " + e.getMessage());
-                return;
+                logger.warn("Invalid client UUID format, using default: {}", config.clientUuid);
+                clientUuid = UUID.fromString(ComfoAirBindingConstants.COMFOCONNECT_DEFAULT_CLIENT_UUID);
             }
         } else {
             clientUuid = UUID.fromString(ComfoAirBindingConstants.COMFOCONNECT_DEFAULT_CLIENT_UUID);
             logger.debug("Using default client UUID: {}", clientUuid);
         }
 
-        UUID gatewayUuid = UUID.nameUUIDFromBytes(("comfoair-gateway-" + hostname + ":" + config.port).getBytes());
+        // Use gateway UUID from discovery or derive it as fallback
+        UUID gatewayUuid;
+        if (config.gatewayUuid != null && !config.gatewayUuid.isEmpty()) {
+            try {
+                gatewayUuid = UUID.fromString(Objects.requireNonNull(config.gatewayUuid));
+                logger.debug("Using configured gateway UUID: {}", gatewayUuid);
+            } catch (IllegalArgumentException e) {
+                logger.warn("Invalid gateway UUID format, attempting discovery: {}", config.gatewayUuid);
+                gatewayUuid = discoverGatewayUuid(hostname, ComfoAirBindingConstants.COMFOCONNECT_DEFAULT_PORT);
+                if (gatewayUuid == null) {
+                    // Discovery failed, use fallback
+                    logger.warn("Gateway discovery failed, using derived UUID as fallback");
+                    gatewayUuid = UUID.nameUUIDFromBytes(
+                            ("comfoair-gateway-" + hostname + ":" + ComfoAirBindingConstants.COMFOCONNECT_DEFAULT_PORT)
+                                    .getBytes());
+                }
+            }
+        } else {
+            logger.debug("No gateway UUID configured, attempting discovery");
+            gatewayUuid = discoverGatewayUuid(hostname, ComfoAirBindingConstants.COMFOCONNECT_DEFAULT_PORT);
+            if (gatewayUuid == null) {
+                // Discovery failed, use fallback
+                logger.debug("Gateway discovery failed, using derived UUID as fallback");
+                gatewayUuid = UUID.nameUUIDFromBytes(
+                        ("comfoair-gateway-" + hostname + ":" + ComfoAirBindingConstants.COMFOCONNECT_DEFAULT_PORT)
+                                .getBytes());
+            }
+        }
 
-        ComfoConnectTcpConnector connector = new ComfoConnectTcpConnector(hostname, config.port, clientUuid,
-                gatewayUuid);
+        ComfoConnectTcpConnector connector = new ComfoConnectTcpConnector(hostname,
+                ComfoAirBindingConstants.COMFOCONNECT_DEFAULT_PORT, clientUuid, gatewayUuid);
         this.connector = connector;
 
         int pinCode;
-        try {
-            pinCode = Integer.parseInt(pin);
-        } catch (NumberFormatException e) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                    "Gateway PIN must be a numeric value");
-            return;
+        if (config.pin == null || config.pin.isEmpty()) {
+            pinCode = 0; // Default PIN when not configured
+            logger.debug("Using default PIN (0) as none was configured");
+        } else {
+            try {
+                pinCode = Integer.parseInt(Objects.requireNonNull(config.pin));
+            } catch (NumberFormatException e) {
+                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
+                        "Gateway PIN must be a numeric value");
+                return;
+            }
         }
 
         ComfoConnectProtocolHandler protocolHandler = new ComfoConnectProtocolHandler(connector, pinCode,
@@ -148,8 +176,13 @@ public class ComfoConnectBridgeHandler extends BaseBridgeHandler {
             connector.connect();
             logger.debug("TCP connection established, initializing protocol");
 
+            // Start the message consumer loop BEFORE protocol initialization
+            // so responses can be received and processed
+            startMessageConsumer(connector, protocolHandler);
+
             protocolHandler.initialize();
             logger.info("ComfoConnect bridge connected and authenticated");
+
             updateStatus(ThingStatus.ONLINE);
 
             ScheduledFuture<?> task = connectionRetryTask;
@@ -197,6 +230,34 @@ public class ComfoConnectBridgeHandler extends BaseBridgeHandler {
         connectionRetryTask = scheduler.schedule(this::connect, CONNECTION_ATTEMPT_DELAY_SEC, TimeUnit.SECONDS);
     }
 
+    /**
+     * Start the message consumer loop that processes incoming messages from the gateway.
+     * This task runs in the background and continuously polls for messages from the connector's queue,
+     * then dispatches them to the protocol handler for processing.
+     *
+     * @param connector the TCP connector with queued messages
+     * @param protocolHandler the protocol handler to process messages
+     */
+    private void startMessageConsumer(final ComfoConnectTcpConnector connector,
+            final ComfoConnectProtocolHandler protocolHandler) {
+        logger.debug("Starting message consumer loop");
+
+        messageConsumerTask = scheduler.submit(() -> {
+            try {
+                while (!Thread.currentThread().isInterrupted()) {
+                    byte[] message = connector.getNextMessage();
+                    if (message != null) {
+                        logger.trace("Message consumer: processing {} bytes", message.length);
+                        protocolHandler.handleIncomingMessage(message);
+                    }
+                }
+            } catch (Exception e) {
+                logger.warn("Unexpected error in message consumer loop: {}", e.getMessage(), e);
+            }
+            logger.debug("Message consumer loop stopped");
+        });
+    }
+
     @Override
     public void dispose() {
         logger.info("Disposing ComfoConnect bridge: {}", getThing().getUID());
@@ -205,6 +266,12 @@ public class ComfoConnectBridgeHandler extends BaseBridgeHandler {
         if (task != null) {
             task.cancel(true);
             connectionRetryTask = null;
+        }
+
+        Future<?> consumerTask = messageConsumerTask;
+        if (consumerTask != null) {
+            consumerTask.cancel(true);
+            messageConsumerTask = null;
         }
 
         ComfoConnectProtocolHandler protocolHandler = this.protocolHandler;
@@ -219,6 +286,73 @@ public class ComfoConnectBridgeHandler extends BaseBridgeHandler {
 
         this.connector = null;
         this.protocolHandler = null;
+    }
+
+    /**
+     * Discover the gateway UUID via UDP discovery message sent directly to the gateway host.
+     *
+     * @param hostname the hostname or IP address of the gateway
+     * @param port the UDP port of the gateway
+     * @return the discovered gateway UUID, or null if discovery fails
+     */
+    private @Nullable UUID discoverGatewayUuid(final String hostname, final int port) {
+        try {
+            logger.debug("Attempting to discover gateway UUID from {}:{}", hostname, port);
+            InetAddress gatewayAddress = InetAddress.getByName(hostname);
+
+            try (DatagramSocket socket = new DatagramSocket()) {
+                socket.setSoTimeout(5000); // 5 second timeout for discovery
+
+                // Send discovery message (same format as in ComfoConnectDiscoveryService)
+                byte[] discoveryMessage = { 0x0a, 0x00 };
+                DatagramPacket sendPacket = new DatagramPacket(discoveryMessage, discoveryMessage.length,
+                        gatewayAddress, port);
+                socket.send(sendPacket);
+
+                // Receive response
+                byte[] buffer = new byte[2048];
+                DatagramPacket receivePacket = new DatagramPacket(buffer, buffer.length);
+                socket.receive(receivePacket);
+
+                // Parse discovery response
+                byte[] data = new byte[receivePacket.getLength()];
+                System.arraycopy(receivePacket.getData(), receivePacket.getOffset(), data, 0,
+                        receivePacket.getLength());
+
+                Zehnder.DiscoveryOperation operation = Zehnder.DiscoveryOperation.parseFrom(data);
+                if (operation.hasSearchGatewayResponse()) {
+                    Zehnder.SearchGatewayResponse response = operation.getSearchGatewayResponse();
+                    byte[] uuidBytes = response.getUuid().toByteArray();
+                    UUID uuid = bytesToUuid(uuidBytes);
+                    logger.info("Gateway UUID discovered: {}", uuid);
+                    return uuid;
+                }
+            }
+        } catch (SocketTimeoutException e) {
+            logger.debug("Gateway discovery timeout for {}:{}", hostname, port);
+        } catch (Exception e) {
+            logger.debug("Gateway discovery failed for {}:{} - {}", hostname, port, e.getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * Convert 16 bytes to a UUID.
+     *
+     * @param bytes the 16-byte UUID
+     * @return the UUID
+     */
+    private UUID bytesToUuid(byte[] bytes) {
+        if (bytes.length != 16) {
+            throw new IllegalArgumentException("UUID bytes must be 16 bytes long");
+        }
+        long most = 0;
+        long least = 0;
+        for (int i = 0; i < 8; i++) {
+            most = (most << 8) | (bytes[i] & 0xFF);
+            least = (least << 8) | (bytes[8 + i] & 0xFF);
+        }
+        return new UUID(most, least);
     }
 
     /**

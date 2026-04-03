@@ -43,9 +43,17 @@ public class ComfoAirBindingConstants {
     // ComfoConnect configuration
     /**
      * Default client UUID for ComfoConnect authentication.
-     * Generated from ASCII bytes of "openHAB" (6F 70 65 6E 48 41 42) padded with zeros.
+     * Uses the fixed client identifier bytes "openHAB" (7 ASCII characters) followed by 10 null bytes.
+     * Hex: 6F 70 65 6E 48 41 42 00 00 00 00 00 00 00 00 00
+     * UUID: 6f70656e-4841-4200-0000-000000000000
      */
     public static final String COMFOCONNECT_DEFAULT_CLIENT_UUID = "6f70656e-4841-4200-0000-000000000000";
+
+    /**
+     * Default port for ComfoConnect gateway communication.
+     * The ComfoConnect LAN gateway always uses port 56747 for TCP connections.
+     */
+    public static final int COMFOCONNECT_DEFAULT_PORT = 56747;
 
     // Thing properties
     public static final String PROPERTY_SOFTWARE_MAIN_VERSION = "SOFTWARE_VERSION_MAIN";
