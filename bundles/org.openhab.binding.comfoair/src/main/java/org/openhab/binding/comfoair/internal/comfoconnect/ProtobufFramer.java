@@ -102,7 +102,7 @@ public class ProtobufFramer {
         byte[] frameBytes = baos.toByteArray();
 
         // Log hex dump of frame for debugging
-        logger.info("Frame created: {} bytes, hex: {}", frameBytes.length, bytesToHex(frameBytes));
+        logger.debug("Frame created: {} bytes, hex: {}", frameBytes.length, bytesToHex(frameBytes));
 
         return frameBytes;
     }

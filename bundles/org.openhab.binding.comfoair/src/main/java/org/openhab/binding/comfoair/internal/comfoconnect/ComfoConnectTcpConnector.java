@@ -28,6 +28,8 @@ import org.eclipse.jdt.annotation.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.zehnder.proto.Zehnder;
+
 /**
  * TCP socket-based connector for ComfoConnect protocol (newer Q-series devices).
  *
@@ -139,12 +141,36 @@ public class ComfoConnectTcpConnector extends ComfoConnectConnector {
             try {
                 out.write(message);
                 out.flush();
-                logger.info("Sent {} bytes to gateway", message.length);
+                logger.debug("Sent {} bytes to gateway", message.length);
             } catch (IOException e) {
                 logger.error("Error sending message: {}", e.getMessage());
                 isConnected = false;
                 throw e;
             }
+        }
+    }
+
+    @Override
+    public void sendRpdoRequest(final int pdid, final int type) throws IOException {
+        logger.debug("sendRpdoRequest called: pdid={}, type={}", pdid, type);
+
+        try {
+            Zehnder.CnRpdoRequest.Builder rpdoBuilder = Zehnder.CnRpdoRequest.newBuilder();
+            rpdoBuilder.setPdid(pdid);
+            rpdoBuilder.setType(type);
+            logger.debug("Built CnRpdoRequest: pdid={}, type={}", pdid, type);
+
+            byte[] frame = getFramer().createFrame(
+                    Zehnder.GatewayOperation.newBuilder()
+                            .setType(Zehnder.GatewayOperation.OperationType.CnRpdoRequestType).build(),
+                    rpdoBuilder.build());
+
+            logger.debug("Created RPDO request frame, length={} bytes", frame.length);
+            sendMessage(frame);
+            logger.info("RPDO request sent for sensor {}", pdid);
+        } catch (IOException e) {
+            logger.error("Failed to send RPDO request: {}", e.getMessage());
+            throw e;
         }
     }
 

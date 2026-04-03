@@ -26,12 +26,14 @@ import java.util.concurrent.TimeUnit;
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.comfoair.internal.ComfoAirBindingConstants;
+import org.openhab.core.library.types.StringType;
 import org.openhab.core.thing.Bridge;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.ThingStatus;
 import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.thing.binding.BaseBridgeHandler;
 import org.openhab.core.types.Command;
+import org.openhab.core.types.UnDefType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -176,6 +178,9 @@ public class ComfoConnectBridgeHandler extends BaseBridgeHandler {
             connector.connect();
             logger.debug("TCP connection established, initializing protocol");
 
+            // Register sensor data callback before protocol initialization
+            protocolHandler.setSensorCallback(this::handleSensorData);
+
             // Start the message consumer loop BEFORE protocol initialization
             // so responses can be received and processed
             startMessageConsumer(connector, protocolHandler);
@@ -262,6 +267,12 @@ public class ComfoConnectBridgeHandler extends BaseBridgeHandler {
     public void dispose() {
         logger.info("Disposing ComfoConnect bridge: {}", getThing().getUID());
 
+        // Unregister sensor callback
+        ComfoConnectProtocolHandler protocolHandler = this.protocolHandler;
+        if (protocolHandler != null) {
+            protocolHandler.setSensorCallback(null);
+        }
+
         ScheduledFuture<?> task = connectionRetryTask;
         if (task != null) {
             task.cancel(true);
@@ -274,7 +285,6 @@ public class ComfoConnectBridgeHandler extends BaseBridgeHandler {
             messageConsumerTask = null;
         }
 
-        ComfoConnectProtocolHandler protocolHandler = this.protocolHandler;
         if (protocolHandler != null) {
             protocolHandler.shutdown();
         }
@@ -286,6 +296,45 @@ public class ComfoConnectBridgeHandler extends BaseBridgeHandler {
 
         this.connector = null;
         this.protocolHandler = null;
+    }
+
+    /**
+     * Handle sensor data received from the gateway.
+     *
+     * @param sensorId the sensor ID
+     * @param value the sensor value
+     */
+    private void handleSensorData(final int sensorId, final int value) {
+        logger.debug("handleSensorData called: sensorId={}, value={}", sensorId, value);
+        if (sensorId == 65) { // Fan speed sensor
+            logger.debug("Processing fan speed sensor data: value={}", value);
+            handleFanSpeedUpdate(value);
+        } else {
+            logger.debug("Ignoring data for unknown sensor: {}", sensorId);
+        }
+    }
+
+    /**
+     * Handle an update to the fan speed value.
+     *
+     * @param value the fan speed value (0-3)
+     */
+    private void handleFanSpeedUpdate(final int value) {
+        try {
+            logger.debug("handleFanSpeedUpdate called: value={}", value);
+            ChannelUID channelUID = new ChannelUID(getThing().getUID(), "ventilationSpeed");
+
+            if (value >= 0 && value <= 3) {
+                logger.debug("Updating ventilation speed channel to value={}", value);
+                updateState(channelUID, new StringType(String.valueOf(value)));
+                logger.debug("Ventilation speed channel updated successfully");
+            } else {
+                logger.warn("Invalid fan speed value: {} (out of range 0-3)", value);
+                updateState(channelUID, UnDefType.UNDEF);
+            }
+        } catch (Exception e) {
+            logger.error("Error updating ventilation speed channel: {}", e.getMessage(), e);
+        }
     }
 
     /**

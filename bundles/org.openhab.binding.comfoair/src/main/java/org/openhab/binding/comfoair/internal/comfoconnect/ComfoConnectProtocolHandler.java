@@ -62,6 +62,11 @@ public class ComfoConnectProtocolHandler {
     private final int pinCode;
     private final boolean autoTakeover;
 
+    // Sensor subscription
+    private static final int SENSOR_FAN_SPEED_MODE = 65; // PDO sensor 65: fan speed (0-3)
+    private static final int SENSOR_FAN_SPEED_TYPE = 1; // TYPE_CN_UINT8
+    private @Nullable SensorDataCallback sensorCallback;
+
     private volatile boolean sessionActive = false;
     private volatile int nextReference = 1;
     private final Map<Integer, PendingRequest<?>> pendingRequests = new HashMap<>();
@@ -105,6 +110,15 @@ public class ComfoConnectProtocolHandler {
     }
 
     /**
+     * Set the sensor data callback for receiving sensor updates.
+     *
+     * @param callback the callback to invoke when sensor data arrives, or null to unregister
+     */
+    public void setSensorCallback(final @Nullable SensorDataCallback callback) {
+        this.sensorCallback = callback;
+    }
+
+    /**
      * Initialize the protocol: register (if needed) and start session.
      * This must be called after the TCP connection is established.
      *
@@ -118,6 +132,9 @@ public class ComfoConnectProtocolHandler {
         registerAppIfNeeded();
         startSession();
         startKeepAliveTimer();
+
+        // Subscribe to fan speed sensor after session is established
+        subscribeToFanSpeedSensor();
 
         sessionActive = true;
         logger.info("ComfoConnect protocol initialized successfully");
@@ -548,8 +565,14 @@ public class ComfoConnectProtocolHandler {
      * @param payload the payload bytes
      */
     private void handleNotification(final GatewayOperation operation, final byte[] payload) {
-        logger.trace("Received notification: type={}", operation.getType());
-        // TODO: Route to listeners
+        logger.debug("Received notification: type={}, payload length={}", operation.getType(), payload.length);
+
+        if (operation.getType() == GatewayOperation.OperationType.CnRpdoNotificationType) {
+            logger.debug("Processing CnRpdoNotification with {} bytes", payload.length);
+            handleRpdoNotification(payload);
+        } else {
+            logger.debug("Ignoring notification type: {}", operation.getType());
+        }
     }
 
     /**
@@ -630,4 +653,78 @@ public class ComfoConnectProtocolHandler {
     public boolean isSessionActive() {
         return sessionActive;
     }
+
+    /**
+     * Subscribe to the fan speed sensor (PDO sensor 65).
+     */
+    private void subscribeToFanSpeedSensor() {
+        try {
+            logger.debug("Subscribing to fan speed sensor (PDO {} type {})", SENSOR_FAN_SPEED_MODE,
+                    SENSOR_FAN_SPEED_TYPE);
+            connector.sendRpdoRequest(SENSOR_FAN_SPEED_MODE, SENSOR_FAN_SPEED_TYPE);
+            logger.debug("Fan speed sensor subscription request sent successfully");
+        } catch (IOException e) {
+            logger.warn("Failed to subscribe to fan speed sensor: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Handle incoming RPDO notification from the gateway.
+     *
+     * @param payload the RPDO notification payload
+     */
+    private void handleRpdoNotification(final byte[] payload) {
+        try {
+            logger.debug("handleRpdoNotification: payload length={}", payload.length);
+
+            if (payload.length < 4) {
+                logger.warn("Invalid RPDO notification: payload too short (length={})", payload.length);
+                return;
+            }
+
+            // Extract sensor ID (protobuf format: byte 0 is field tag, byte 1 is the value)
+            // For PDO sensor ID, we expect: byte 0 = 0x08 (field 1, varint), byte 1 = sensor ID
+            int sensorId = payload[1] & 0xFF;
+            logger.debug("RPDO notification for sensor ID: {}", sensorId);
+
+            // Check if this is the fan speed sensor we care about
+            if (sensorId == SENSOR_FAN_SPEED_MODE) {
+                // Extract the fan speed value (byte 3, values 0-3)
+                // Bytes 0-1 are sensor ID, bytes 2-3 are data value
+                int fanSpeed = payload[3] & 0xFF;
+                logger.debug("Fan speed value extracted: {}", fanSpeed);
+
+                if (fanSpeed >= 0 && fanSpeed <= 3) {
+                    logger.debug("Valid fan speed received: {}, invoking callback", fanSpeed);
+                    SensorDataCallback callback = sensorCallback;
+                    if (callback != null) {
+                        logger.debug("Callback is registered, invoking with sensorId={}, value={}", sensorId, fanSpeed);
+                        callback.onSensorDataReceived(sensorId, fanSpeed);
+                    } else {
+                        logger.warn("Callback is null, cannot deliver sensor data");
+                    }
+                } else {
+                    logger.warn("Invalid fan speed value received: {} (out of range 0-3)", fanSpeed);
+                }
+            } else {
+                logger.debug("RPDO notification for different sensor (ID={}), ignoring", sensorId);
+            }
+        } catch (Exception e) {
+            logger.error("Error handling RPDO notification: {}", e.getMessage(), e);
+        }
+    }
+}
+
+/**
+ * Callback interface for receiving sensor data updates from the gateway.
+ */
+@NonNullByDefault
+interface SensorDataCallback {
+    /**
+     * Called when sensor data is received from the gateway.
+     *
+     * @param sensorId the sensor ID
+     * @param value the sensor value
+     */
+    void onSensorDataReceived(int sensorId, int value);
 }

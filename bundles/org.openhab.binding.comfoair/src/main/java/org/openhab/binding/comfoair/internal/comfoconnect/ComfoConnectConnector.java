@@ -83,6 +83,15 @@ public abstract class ComfoConnectConnector {
      */
     public abstract void sendMessage(byte[] message) throws IOException;
 
+    /**
+     * Send an RPDO subscription request for a sensor.
+     *
+     * @param pdid the PDO sensor ID
+     * @param type the sensor data type
+     * @throws IOException if send fails
+     */
+    public abstract void sendRpdoRequest(int pdid, int type) throws IOException;
+
     public abstract ProtobufFramer getFramer();
 
     public abstract java.util.UUID getClientUuid();
