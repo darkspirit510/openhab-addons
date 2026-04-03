@@ -95,20 +95,6 @@
 
 	</thing-type>
 
-	<thing-type id="comfoconnect-node">
-		<label>ComfoConnect Device Node</label>
-		<description>Individual node in a ComfoConnect gateway network</description>
-		<semantic-equipment-tag>HVAC</semantic-equipment-tag>
-
-		<properties>
-			<property name="vendor">Zehnder</property>
-			<property name="thingTypeVersion">1</property>
-		</properties>
-
-		<config-description-ref uri="thing-type:comfoair:comfoconnect-node"/>
-
-	</thing-type>
-
 	<channel-group-type id="bindingControl">
 		<label>Binding Control</label>
 		<channels>

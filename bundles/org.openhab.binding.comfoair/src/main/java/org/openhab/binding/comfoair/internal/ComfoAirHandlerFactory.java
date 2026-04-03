@@ -15,7 +15,6 @@ package org.openhab.binding.comfoair.internal;
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.comfoair.internal.comfoconnect.ComfoConnectBridgeHandler;
-import org.openhab.binding.comfoair.internal.comfoconnect.ComfoConnectDeviceHandler;
 import org.openhab.core.io.transport.serial.SerialPortManager;
 import org.openhab.core.thing.Bridge;
 import org.openhab.core.thing.Thing;
@@ -66,11 +65,6 @@ public class ComfoAirHandlerFactory extends BaseThingHandlerFactory {
         // ComfoConnect LAN bridge handler
         if (ComfoAirBindingConstants.THING_TYPE_COMFOCONNECT_LAN_BRIDGE.equals(thingTypeUID)) {
             return new ComfoConnectBridgeHandler((Bridge) thing);
-        }
-
-        // ComfoConnect device handler
-        if (ComfoAirBindingConstants.THING_TYPE_COMFOCONNECT_NODE.equals(thingTypeUID)) {
-            return new ComfoConnectDeviceHandler(thing);
         }
 
         return null;

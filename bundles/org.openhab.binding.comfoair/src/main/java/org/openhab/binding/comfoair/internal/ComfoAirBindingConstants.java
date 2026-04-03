@@ -33,13 +33,12 @@ public class ComfoAirBindingConstants {
     public static final ThingTypeUID THING_TYPE_COMFOAIR_GENERIC = new ThingTypeUID(BINDING_ID, "comfoair");
     public static final ThingTypeUID THING_TYPE_COMFOAIR_WHR930 = new ThingTypeUID(BINDING_ID, "WHR930");
 
-    // ComfoConnect (LAN) bridge and device types
+    // ComfoConnect (LAN) bridge
     public static final ThingTypeUID THING_TYPE_COMFOCONNECT_LAN_BRIDGE = new ThingTypeUID(BINDING_ID,
             "comfoconnect-lan");
-    public static final ThingTypeUID THING_TYPE_COMFOCONNECT_NODE = new ThingTypeUID(BINDING_ID, "comfoconnect-node");
 
     public static final Set<ThingTypeUID> SUPPORTED_THING_TYPES_UIDS = Set.of(THING_TYPE_COMFOAIR_GENERIC,
-            THING_TYPE_COMFOAIR_WHR930, THING_TYPE_COMFOCONNECT_LAN_BRIDGE, THING_TYPE_COMFOCONNECT_NODE);
+            THING_TYPE_COMFOAIR_WHR930, THING_TYPE_COMFOCONNECT_LAN_BRIDGE);
 
     // ComfoConnect configuration
     /**

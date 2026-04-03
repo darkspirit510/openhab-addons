@@ -37,10 +37,9 @@ import org.slf4j.LoggerFactory;
 import com.zehnder.proto.Zehnder;
 
 /**
- * Discovery service for ComfoConnect gateways and nodes.
+ * Discovery service for ComfoConnect gateways.
  *
- * Discovers ComfoConnect TCP gateways via UDP broadcast on the local network.
- * Also handles discovery of individual nodes (children of a gateway).
+ * Discovers ComfoConnect LAN gateways via UDP broadcast on the local network.
  *
  * @author Sascha Knoop - Initial contribution
  */
@@ -53,8 +52,7 @@ public class ComfoConnectDiscoveryService extends AbstractDiscoveryService {
     private static final int GATEWAY_PORT = 56747;
     private static final byte[] DISCOVERY_MESSAGE = { 0x0a, 0x00 };
     private static final Set<ThingTypeUID> DISCOVERABLE_THINGS = Collections
-            .unmodifiableSet(Set.of(ComfoAirBindingConstants.THING_TYPE_COMFOCONNECT_LAN_BRIDGE,
-                    ComfoAirBindingConstants.THING_TYPE_COMFOCONNECT_NODE));
+            .unmodifiableSet(Set.of(ComfoAirBindingConstants.THING_TYPE_COMFOCONNECT_LAN_BRIDGE));
 
     private @Nullable NetworkAddressService networkAddressService;
 
@@ -235,26 +233,5 @@ public class ComfoConnectDiscoveryService extends AbstractDiscoveryService {
      */
     protected DatagramSocket createDatagramSocket() throws SocketException {
         return new DatagramSocket();
-    }
-
-    /**
-     * Add a discovered device (node).
-     *
-     * @param bridgeUID the bridge UID
-     * @param nodeId the node ID
-     * @param deviceName the device name
-     */
-    public void deviceDiscovered(final ThingUID bridgeUID, final int nodeId, final @Nullable String deviceName) {
-        ThingUID thingUID = new ThingUID(ComfoAirBindingConstants.THING_TYPE_COMFOCONNECT_NODE, bridgeUID,
-                String.format("node%d", nodeId));
-
-        Map<String, Object> properties = new HashMap<>();
-        properties.put("nodeId", nodeId);
-        if (deviceName != null && !deviceName.isEmpty()) {
-            properties.put("deviceName", deviceName);
-        }
-
-        thingDiscovered(DiscoveryResultBuilder.create(thingUID).withBridge(bridgeUID).withProperties(properties)
-                .withLabel("ComfoConnect Node " + nodeId).build());
     }
 }

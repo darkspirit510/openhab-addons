@@ -31,12 +31,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Bridge handler for ComfoConnect TCP gateway devices (newer Q-series).
+ * Bridge handler for ComfoConnect LAN gateway devices (newer Q-series).
  *
  * Manages:
  * - TCP connection to the gateway
  * - Protocol authentication and session management
- * - Child device discovery and communication
  *
  * @author Sascha Knoop - Initial contribution
  */
