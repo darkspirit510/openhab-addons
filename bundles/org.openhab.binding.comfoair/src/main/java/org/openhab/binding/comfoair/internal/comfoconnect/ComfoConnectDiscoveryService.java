@@ -222,7 +222,8 @@ public class ComfoConnectDiscoveryService extends AbstractDiscoveryService {
 
         Map<String, Object> properties = new HashMap<>();
         properties.put("ipAddress", ipAddress);
-        properties.put("uuid", uuid);
+        properties.put("hostname", ipAddress); // Auto-populate hostname with the discovered IP address
+        properties.put("gatewayUuid", uuid); // Store the gateway UUID from discovery
 
         thingDiscovered(DiscoveryResultBuilder.create(thingUID).withProperties(properties)
                 .withLabel("ComfoConnect Gateway (" + ipAddress + ")").build());

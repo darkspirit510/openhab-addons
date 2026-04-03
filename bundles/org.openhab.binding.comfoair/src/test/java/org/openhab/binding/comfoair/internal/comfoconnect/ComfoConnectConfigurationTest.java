@@ -69,15 +69,15 @@ public class ComfoConnectConfigurationTest {
         UUID uuid = UUID.fromString(defaultUuid);
         assertNotNull(uuid);
 
-        // Should be the "openHAB" UUID as documented
+        // Should be the "openHAB" + null bytes UUID as documented
         assertEquals("6f70656e-4841-4200-0000-000000000000", uuid.toString());
     }
 
     // ===== Test 4: Default client UUID comes from "openHAB" string =====
     @Test
     public void testDefaultClientUuidSourceCorrect() {
-        // The UUID is built from "openHAB" bytes: 6F 70 65 6E 48 41 42
-        // Followed by padding: 00 00 00 00 00 00 00 00 00
+        // The UUID is built from "openHAB" + 10 null bytes:
+        // 6F 70 65 6E 48 41 42 00 00 00 00 00 00 00 00 00
         // Result: 6f70656e-4841-4200-0000-000000000000
         String expected = "6f70656e-4841-4200-0000-000000000000";
         String actual = ComfoAirBindingConstants.COMFOCONNECT_DEFAULT_CLIENT_UUID;

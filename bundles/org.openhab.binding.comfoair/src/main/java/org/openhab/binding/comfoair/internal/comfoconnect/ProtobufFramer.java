@@ -99,7 +99,12 @@ public class ProtobufFramer {
         }
 
         dos.flush();
-        return baos.toByteArray();
+        byte[] frameBytes = baos.toByteArray();
+
+        // Log hex dump of frame for debugging
+        logger.info("Frame created: {} bytes, hex: {}", frameBytes.length, bytesToHex(frameBytes));
+
+        return frameBytes;
     }
 
     /**
@@ -195,6 +200,20 @@ public class ProtobufFramer {
         ByteBuffer buffer = ByteBuffer.wrap(bytes);
 
         return new UUID(buffer.getLong(), buffer.getLong());
+    }
+
+    /**
+     * Convert bytes to hexadecimal string for logging.
+     *
+     * @param bytes the bytes to convert
+     * @return hex string representation
+     */
+    private String bytesToHex(final byte[] bytes) {
+        StringBuilder sb = new StringBuilder();
+        for (byte b : bytes) {
+            sb.append(String.format("%02X ", b & 0xFF));
+        }
+        return sb.toString();
     }
 
     /**

@@ -52,7 +52,9 @@ public class ComfoConnectProtocolHandler {
     private final Logger logger = LoggerFactory.getLogger(ComfoConnectProtocolHandler.class);
 
     private static final long KEEPALIVE_INTERVAL_SEC = 30;
-    private static final long REQUEST_TIMEOUT_SEC = 10;
+    private static final long REQUEST_TIMEOUT_SEC = 5;
+    private static final int REQUEST_RETRY_COUNT = 3;
+    private static final long REQUEST_RETRY_DELAY_SEC = 5;
     private static final int MAX_REFERENCE = 0xFFFFFF; // 24-bit reference
 
     private final ComfoConnectConnector connector;
@@ -167,6 +169,39 @@ public class ComfoConnectProtocolHandler {
     }
 
     /**
+     * Send a request with automatic retry on timeout.
+     *
+     * @param request the request message
+     * @param responseClass the expected response class
+     * @param timeoutSec timeout in seconds for each attempt
+     * @return the response
+     * @throws IOException if all retries fail
+     * @throws TimeoutException if timeout occurs
+     * @throws InterruptedException if interrupted
+     */
+    private <T> T sendRequestWithRetry(final com.google.protobuf.MessageLite request, final Class<T> responseClass,
+            final long timeoutSec) throws IOException, TimeoutException, InterruptedException {
+        int attempts = 0;
+        IOException lastException = null;
+
+        while (attempts < REQUEST_RETRY_COUNT) {
+            attempts++;
+            try {
+                return sendRequestSync(request, responseClass, timeoutSec);
+            } catch (TimeoutException e) {
+                lastException = new IOException("Timeout after attempt " + attempts, e);
+                logger.debug("Request attempt {} timed out, retrying in {} seconds", attempts, REQUEST_RETRY_DELAY_SEC);
+                if (attempts < REQUEST_RETRY_COUNT) {
+                    Thread.sleep(REQUEST_RETRY_DELAY_SEC * 1000);
+                }
+            }
+        }
+
+        throw lastException != null ? lastException
+                : new IOException("Request failed after " + REQUEST_RETRY_COUNT + " attempts");
+    }
+
+    /**
      * Send a request asynchronously.
      *
      * @param request the request message
@@ -189,9 +224,9 @@ public class ComfoConnectProtocolHandler {
             opBuilder.setReference(reference);
             setOperationType(opBuilder, request);
 
+            logger.info("Sending {} (reference {})", request.getClass().getSimpleName(), reference);
             byte[] frame = connector.getFramer().createFrame(opBuilder.build(), request);
             connector.sendMessage(frame);
-            logger.trace("Sent request with reference {}", reference);
 
         } catch (IOException e) {
             synchronized (pendingRequests) {
@@ -267,31 +302,21 @@ public class ComfoConnectProtocolHandler {
     }
 
     /**
-     * Check if app is already registered, register if needed with retry on PIN failure.
+     * Register the app if not already registered. Attempts registration and ignores error if already
+     * registered.
      *
      * @throws IOException if registration fails
      * @throws TimeoutException if timeout occurs
      * @throws InterruptedException if interrupted
      */
     private void registerAppIfNeeded() throws IOException, TimeoutException, InterruptedException {
-        logger.debug("Checking if app is already registered");
+        logger.debug("Attempting to register app with gateway");
 
         try {
-            List<String> registeredUuids = listRegisteredApps();
-            java.util.UUID clientUuid = connector.getClientUuid();
-
-            if (registeredUuids.contains(clientUuid.toString())) {
-                logger.info("App {} is already registered", clientUuid);
-                return;
-            }
-
-            logger.debug("App {} is not registered, registering now", clientUuid);
             registerApp();
-
         } catch (IOException e) {
-            // If listRegisteredApps fails, try to register anyway (gateway might not support list command)
-            logger.debug("Failed to check registered apps ({}), attempting registration", e.getMessage());
-            registerApp();
+            // If registration fails with "already registered" or similar error, that's OK
+            logger.debug("Registration failed ({}), assuming already registered or not needed", e.getMessage());
         }
     }
 
@@ -308,7 +333,7 @@ public class ComfoConnectProtocolHandler {
 
         Zehnder.ListRegisteredAppsRequest.Builder builder = Zehnder.ListRegisteredAppsRequest.newBuilder();
 
-        byte[] response = sendRequestSync(builder.build(), byte[].class, REQUEST_TIMEOUT_SEC);
+        byte[] response = sendRequestWithRetry(builder.build(), byte[].class, REQUEST_TIMEOUT_SEC);
 
         // Parse the ListRegisteredAppsConfirm response
         List<String> uuids = new ArrayList<>();
@@ -343,9 +368,9 @@ public class ComfoConnectProtocolHandler {
         builder.setPin(pinCode);
         builder.setDevicename("openHAB");
 
-        // sendRequestSync will wait for response with potential error from GatewayOperation
+        // sendRequestWithRetry will retry up to 3 times with 5-second delays
         // If gateway returns NOT_ALLOWED result, it will be caught as an error
-        sendRequestSync(builder.build(), byte[].class, REQUEST_TIMEOUT_SEC);
+        sendRequestWithRetry(builder.build(), byte[].class, REQUEST_TIMEOUT_SEC);
         logger.info("App registered successfully with UUID: {}", connector.getClientUuid());
     }
 
@@ -362,9 +387,9 @@ public class ComfoConnectProtocolHandler {
         Zehnder.StartSessionRequest.Builder builder = Zehnder.StartSessionRequest.newBuilder();
         builder.setTakeover(autoTakeover);
 
-        // sendRequestSync will raise an exception if the gateway returns an error result
+        // sendRequestWithRetry will retry up to 3 times with 5-second delays
         // For OTHER_SESSION result, we either allow it (if autoTakeover=true) or fail
-        sendRequestSync(builder.build(), byte[].class, REQUEST_TIMEOUT_SEC);
+        sendRequestWithRetry(builder.build(), byte[].class, REQUEST_TIMEOUT_SEC);
         logger.info("Session started successfully");
     }
 
@@ -415,12 +440,13 @@ public class ComfoConnectProtocolHandler {
      */
     private void sendKeepAlive() {
         try {
+            int reference = allocateReference();
             Zehnder.KeepAlive.Builder builder = Zehnder.KeepAlive.newBuilder();
-            byte[] frame = connector.getFramer().createFrame(
-                    GatewayOperation.newBuilder().setType(GatewayOperation.OperationType.KeepAliveType).build(),
+            byte[] frame = connector.getFramer().createFrame(GatewayOperation.newBuilder()
+                    .setType(GatewayOperation.OperationType.KeepAliveType).setReference(reference).build(),
                     builder.build());
             connector.sendMessage(frame);
-            logger.trace("Sent keep-alive message");
+            logger.trace("Sent keep-alive message (reference {})", reference);
         } catch (IOException e) {
             logger.warn("Error sending keep-alive: {}", e.getMessage());
         }

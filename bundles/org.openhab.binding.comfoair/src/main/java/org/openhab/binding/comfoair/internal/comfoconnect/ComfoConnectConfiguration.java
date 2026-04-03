@@ -44,6 +44,11 @@ public class ComfoConnectConfiguration {
     public @Nullable String clientUuid;
 
     /**
+     * Gateway UUID (should be set from discovery result).
+     */
+    public @Nullable String gatewayUuid;
+
+    /**
      * Device refresh interval in seconds.
      */
     public int refreshInterval = 30;

@@ -19,6 +19,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketException;
+import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.util.UUID;
 
@@ -138,7 +139,7 @@ public class ComfoConnectTcpConnector extends ComfoConnectConnector {
             try {
                 out.write(message);
                 out.flush();
-                logger.trace("Sent {} bytes", message.length);
+                logger.info("Sent {} bytes to gateway", message.length);
             } catch (IOException e) {
                 logger.error("Error sending message: {}", e.getMessage());
                 isConnected = false;
@@ -158,9 +159,11 @@ public class ComfoConnectTcpConnector extends ComfoConnectConnector {
             return;
         }
 
+        logger.info("Reader loop started, waiting for messages from gateway");
         try {
             while (!Thread.currentThread().isInterrupted() && isConnected) {
                 try {
+                    logger.debug("Attempting to read next message from gateway...");
                     int totalLength = in.readInt();
 
                     if (totalLength < 0 || totalLength > 65536) {
@@ -180,6 +183,10 @@ public class ComfoConnectTcpConnector extends ComfoConnectConnector {
 
                     logger.trace("Received {} bytes", frameData.length);
 
+                } catch (SocketTimeoutException e) {
+                    // Socket timeout is normal - just continue waiting for data
+                    logger.debug("Socket timeout while reading ({}ms), retrying...", SOCKET_TIMEOUT_MS);
+                    continue;
                 } catch (SocketException e) {
                     if (Thread.currentThread().isInterrupted()) {
                         logger.debug("Reader interrupted (SocketException): {}", e.getMessage());

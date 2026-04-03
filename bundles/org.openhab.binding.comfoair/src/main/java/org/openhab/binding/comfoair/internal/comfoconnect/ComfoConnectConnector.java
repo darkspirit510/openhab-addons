@@ -38,7 +38,7 @@ public abstract class ComfoConnectConnector {
 
     private final Logger logger = LoggerFactory.getLogger(ComfoConnectConnector.class);
 
-    protected static final int SOCKET_TIMEOUT_MS = 100;
+    protected static final int SOCKET_TIMEOUT_MS = 0; // No timeout - use blocking reads instead
     protected static final int DEFAULT_QUEUE_CAPACITY = 100;
 
     protected final BlockingQueue<byte[]> messageQueue;

@@ -31,6 +31,7 @@
 		<parameter name="clientUuid" type="text" required="false">
 			<label>Client UUID</label>
 			<description>Custom UUID for app registration (optional, defaults to "openHAB" + null bytes)</description>
+			<default>6f70656e-4841-4200-0000-000000000000</default>
 			<advanced>true</advanced>
 		</parameter>
 		<parameter name="gatewayUuid" type="text" required="false">
