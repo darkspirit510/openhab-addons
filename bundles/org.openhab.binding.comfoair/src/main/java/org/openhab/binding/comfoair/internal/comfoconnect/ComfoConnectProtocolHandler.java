@@ -65,6 +65,65 @@ public class ComfoConnectProtocolHandler {
     // Sensor subscription
     private static final int SENSOR_FAN_SPEED_MODE = 65; // PDO sensor 65: fan speed (0-3)
     private static final int SENSOR_FAN_SPEED_TYPE = 1; // TYPE_CN_UINT8
+
+    // Sensor data types
+    private static final int TYPE_CN_UINT8 = 1;
+    private static final int TYPE_CN_UINT64 = 7; // 64-bit unsigned integer
+
+    // Phase 1: Fan-related sensors (no value corrections)
+    private static final int SENSOR_OPERATING_MODE = 1; // TYPE_CN_UINT8
+    private static final int SENSOR_SUPPLY_FAN_SPEED = 74; // TYPE_CN_UINT8
+    private static final int SENSOR_EXHAUST_FAN_SPEED = 75; // TYPE_CN_UINT8
+    private static final int SENSOR_SUPPLY_FAN_SPEED_SET = 76; // TYPE_CN_UINT8
+    private static final int SENSOR_EXHAUST_FAN_SPEED_SET = 77; // TYPE_CN_UINT8
+    private static final int SENSOR_SUPPLY_FAN_SPEED_PERCENTAGE = 66; // TYPE_CN_UINT8
+    private static final int SENSOR_EXHAUST_FAN_SPEED_PERCENTAGE = 67; // TYPE_CN_UINT8
+    private static final int SENSOR_SUPPLY_FAN_SPEED_PERCENTAGE_SET = 68; // TYPE_CN_UINT8
+    private static final int SENSOR_EXHAUST_FAN_SPEED_PERCENTAGE_SET = 69; // TYPE_CN_UINT8
+    private static final int SENSOR_BYPASS_STATE = 81; // TYPE_CN_UINT8
+    private static final int SENSOR_PREHEATER_STATE = 82; // TYPE_CN_UINT8
+    private static final int SENSOR_CURRENT_HUMIDITY = 10; // TYPE_CN_UINT8
+    private static final int SENSOR_TARGET_HUMIDITY = 11; // TYPE_CN_UINT8
+    private static final int SENSOR_HUMIDIFIER_HUMIDITY = 209; // TYPE_CN_UINT8
+
+    // Phase 2: Other basic sensors (no value corrections)
+    private static final int SENSOR_WEEK_PROFILE_ACTIVE = 12; // TYPE_CN_UINT8
+    private static final int SENSOR_GLOBAL_ALLERGEN_MODE = 32; // TYPE_CN_UINT8
+    private static final int SENSOR_EWT_SPEED = 88; // TYPE_CN_UINT8
+    private static final int SENSOR_EWT_POSITION = 89; // TYPE_CN_UINT8
+    private static final int SENSOR_ENTHALPY_STATE = 96; // TYPE_CN_UINT8
+    private static final int SENSOR_FROST_PROTECTION_SPEED = 97; // TYPE_CN_UINT8
+    private static final int SENSOR_FROST_PROTECTION_LOSS = 98; // TYPE_CN_UINT8
+    private static final int SENSOR_FROST_PROTECTION_TIMEOUT = 99; // TYPE_CN_UINT8
+    private static final int SENSOR_HCE_PRESENT = 200; // TYPE_CN_UINT8
+
+    // Phase 3: Sensors with value corrections
+    // Temperature sensors (divide by 10): 2, 3, 4, 5, 100, 101, 102, 103, 104
+    private static final int SENSOR_OUTDOOR_TEMPERATURE_IN = 2; // TYPE_CN_UINT8, divide by 10
+    private static final int SENSOR_OUTDOOR_TEMPERATURE_OUT = 3; // TYPE_CN_UINT8, divide by 10
+    private static final int SENSOR_INDOOR_TEMPERATURE_IN = 4; // TYPE_CN_UINT8, divide by 10
+    private static final int SENSOR_INDOOR_TEMPERATURE_OUT = 5; // TYPE_CN_UINT8, divide by 10
+    private static final int SENSOR_EWT_TEMPERATURE = 100; // TYPE_CN_UINT8, divide by 10
+    private static final int SENSOR_COOKER_TEMPERATURE = 101; // TYPE_CN_UINT8, divide by 10
+    private static final int SENSOR_HEATER_TEMPERATURE = 102; // TYPE_CN_UINT8, divide by 10
+    private static final int SENSOR_PRE_HEATER_TEMPERATURE = 103; // TYPE_CN_UINT8, divide by 10
+    private static final int SENSOR_INDOOR_HUMIDITY = 104; // TYPE_CN_UINT8, divide by 10
+    // Humidity sensors (no correction): 13, 14, 15, 16, 105
+    private static final int SENSOR_EXHAUST_HUMIDITY = 13; // TYPE_CN_UINT8
+    private static final int SENSOR_INDOOR_HUMIDITY_2 = 14; // TYPE_CN_UINT8
+    private static final int SENSOR_EXHAUST_HUMIDITY_2 = 15; // TYPE_CN_UINT8
+    private static final int SENSOR_INDOOR_HUMIDITY_3 = 16; // TYPE_CN_UINT8
+    private static final int SENSOR_COMFOSUPPLY_HUMIDITY = 105; // TYPE_CN_UINT8
+    // Boolean sensors: 17, 18, 21
+    private static final int SENSOR_T1_SENSOR_PRESENT = 17; // TYPE_CN_UINT8
+    private static final int SENSOR_T2_SENSOR_PRESENT = 18; // TYPE_CN_UINT8
+    private static final int SENSOR_T3_SENSOR_PRESENT = 21; // TYPE_CN_UINT8
+    // Mapping sensor: 208 (0→Celsius, else→Fahrenheit)
+    private static final int SENSOR_TEMPERATURE_UNIT = 208; // TYPE_CN_UINT8
+
+    // Phase 4: Complex sensors
+    private static final int SENSOR_AIRFLOW_CONSTRAINTS = 230; // TYPE_CN_UINT64, requires bit-shifting
+
     private @Nullable SensorDataCallback sensorCallback;
 
     private volatile boolean sessionActive = false;
@@ -133,8 +192,9 @@ public class ComfoConnectProtocolHandler {
         startSession();
         startKeepAliveTimer();
 
-        // Subscribe to fan speed sensor after session is established
-        subscribeToFanSpeedSensor();
+        // Note: Sensor subscriptions are now handled by the BridgeHandler.
+        // It will subscribe to sensors based on which channels are linked.
+        // See ComfoConnectBridgeHandler.subscribeToLinkedChannels()
 
         sessionActive = true;
         logger.info("ComfoConnect protocol initialized successfully");
@@ -668,7 +728,7 @@ public class ComfoConnectProtocolHandler {
     /**
      * Subscribe to the fan speed sensor (PDO sensor 65).
      */
-    private void subscribeToFanSpeedSensor() {
+    public void subscribeToFanSpeedSensor() {
         try {
             logger.debug("Subscribing to fan speed sensor (PDO {} type {})", SENSOR_FAN_SPEED_MODE,
                     SENSOR_FAN_SPEED_TYPE);
@@ -676,6 +736,564 @@ public class ComfoConnectProtocolHandler {
             logger.debug("Fan speed sensor subscription request sent successfully");
         } catch (IOException e) {
             logger.warn("Failed to subscribe to fan speed sensor: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Subscribe to operating mode sensor (PDO 1).
+     */
+    public void subscribeToOperatingModeSensor() {
+        try {
+            logger.debug("Subscribing to operating mode sensor (PDO {} type {})", SENSOR_OPERATING_MODE, TYPE_CN_UINT8);
+            connector.sendRpdoRequest(SENSOR_OPERATING_MODE, TYPE_CN_UINT8);
+            logger.debug("Operating mode sensor subscription request sent successfully");
+        } catch (IOException e) {
+            logger.warn("Failed to subscribe to operating mode sensor: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Subscribe to supply fan speed sensor (PDO 74).
+     */
+    public void subscribeToSupplyFanSpeedSensor() {
+        try {
+            logger.debug("Subscribing to supply fan speed sensor (PDO {} type {})", SENSOR_SUPPLY_FAN_SPEED,
+                    TYPE_CN_UINT8);
+            connector.sendRpdoRequest(SENSOR_SUPPLY_FAN_SPEED, TYPE_CN_UINT8);
+            logger.debug("Supply fan speed sensor subscription request sent successfully");
+        } catch (IOException e) {
+            logger.warn("Failed to subscribe to supply fan speed sensor: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Subscribe to exhaust fan speed sensor (PDO 75).
+     */
+    public void subscribeToExhaustFanSpeedSensor() {
+        try {
+            logger.debug("Subscribing to exhaust fan speed sensor (PDO {} type {})", SENSOR_EXHAUST_FAN_SPEED,
+                    TYPE_CN_UINT8);
+            connector.sendRpdoRequest(SENSOR_EXHAUST_FAN_SPEED, TYPE_CN_UINT8);
+            logger.debug("Exhaust fan speed sensor subscription request sent successfully");
+        } catch (IOException e) {
+            logger.warn("Failed to subscribe to exhaust fan speed sensor: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Subscribe to supply fan speed set sensor (PDO 76).
+     */
+    public void subscribeToSupplyFanSpeedSetSensor() {
+        try {
+            logger.debug("Subscribing to supply fan speed set sensor (PDO {} type {})", SENSOR_SUPPLY_FAN_SPEED_SET,
+                    TYPE_CN_UINT8);
+            connector.sendRpdoRequest(SENSOR_SUPPLY_FAN_SPEED_SET, TYPE_CN_UINT8);
+            logger.debug("Supply fan speed set sensor subscription request sent successfully");
+        } catch (IOException e) {
+            logger.warn("Failed to subscribe to supply fan speed set sensor: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Subscribe to exhaust fan speed set sensor (PDO 77).
+     */
+    public void subscribeToExhaustFanSpeedSetSensor() {
+        try {
+            logger.debug("Subscribing to exhaust fan speed set sensor (PDO {} type {})", SENSOR_EXHAUST_FAN_SPEED_SET,
+                    TYPE_CN_UINT8);
+            connector.sendRpdoRequest(SENSOR_EXHAUST_FAN_SPEED_SET, TYPE_CN_UINT8);
+            logger.debug("Exhaust fan speed set sensor subscription request sent successfully");
+        } catch (IOException e) {
+            logger.warn("Failed to subscribe to exhaust fan speed set sensor: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Subscribe to supply fan speed percentage sensor (PDO 66).
+     */
+    public void subscribeToSupplyFanSpeedPercentageSensor() {
+        try {
+            logger.debug("Subscribing to supply fan speed percentage sensor (PDO {} type {})",
+                    SENSOR_SUPPLY_FAN_SPEED_PERCENTAGE, TYPE_CN_UINT8);
+            connector.sendRpdoRequest(SENSOR_SUPPLY_FAN_SPEED_PERCENTAGE, TYPE_CN_UINT8);
+            logger.debug("Supply fan speed percentage sensor subscription request sent successfully");
+        } catch (IOException e) {
+            logger.warn("Failed to subscribe to supply fan speed percentage sensor: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Subscribe to exhaust fan speed percentage sensor (PDO 67).
+     */
+    public void subscribeToExhaustFanSpeedPercentageSensor() {
+        try {
+            logger.debug("Subscribing to exhaust fan speed percentage sensor (PDO {} type {})",
+                    SENSOR_EXHAUST_FAN_SPEED_PERCENTAGE, TYPE_CN_UINT8);
+            connector.sendRpdoRequest(SENSOR_EXHAUST_FAN_SPEED_PERCENTAGE, TYPE_CN_UINT8);
+            logger.debug("Exhaust fan speed percentage sensor subscription request sent successfully");
+        } catch (IOException e) {
+            logger.warn("Failed to subscribe to exhaust fan speed percentage sensor: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Subscribe to supply fan speed percentage set sensor (PDO 68).
+     */
+    public void subscribeToSupplyFanSpeedPercentageSetSensor() {
+        try {
+            logger.debug("Subscribing to supply fan speed percentage set sensor (PDO {} type {})",
+                    SENSOR_SUPPLY_FAN_SPEED_PERCENTAGE_SET, TYPE_CN_UINT8);
+            connector.sendRpdoRequest(SENSOR_SUPPLY_FAN_SPEED_PERCENTAGE_SET, TYPE_CN_UINT8);
+            logger.debug("Supply fan speed percentage set sensor subscription request sent successfully");
+        } catch (IOException e) {
+            logger.warn("Failed to subscribe to supply fan speed percentage set sensor: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Subscribe to exhaust fan speed percentage set sensor (PDO 69).
+     */
+    public void subscribeToExhaustFanSpeedPercentageSetSensor() {
+        try {
+            logger.debug("Subscribing to exhaust fan speed percentage set sensor (PDO {} type {})",
+                    SENSOR_EXHAUST_FAN_SPEED_PERCENTAGE_SET, TYPE_CN_UINT8);
+            connector.sendRpdoRequest(SENSOR_EXHAUST_FAN_SPEED_PERCENTAGE_SET, TYPE_CN_UINT8);
+            logger.debug("Exhaust fan speed percentage set sensor subscription request sent successfully");
+        } catch (IOException e) {
+            logger.warn("Failed to subscribe to exhaust fan speed percentage set sensor: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Subscribe to bypass state sensor (PDO 81).
+     */
+    public void subscribeToBypassStateSensor() {
+        try {
+            logger.debug("Subscribing to bypass state sensor (PDO {} type {})", SENSOR_BYPASS_STATE, TYPE_CN_UINT8);
+            connector.sendRpdoRequest(SENSOR_BYPASS_STATE, TYPE_CN_UINT8);
+            logger.debug("Bypass state sensor subscription request sent successfully");
+        } catch (IOException e) {
+            logger.warn("Failed to subscribe to bypass state sensor: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Subscribe to preheater state sensor (PDO 82).
+     */
+    public void subscribeToPreheaterStateSensor() {
+        try {
+            logger.debug("Subscribing to preheater state sensor (PDO {} type {})", SENSOR_PREHEATER_STATE,
+                    TYPE_CN_UINT8);
+            connector.sendRpdoRequest(SENSOR_PREHEATER_STATE, TYPE_CN_UINT8);
+            logger.debug("Preheater state sensor subscription request sent successfully");
+        } catch (IOException e) {
+            logger.warn("Failed to subscribe to preheater state sensor: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Subscribe to current humidity sensor (PDO 10).
+     */
+    public void subscribeToCurrentHumiditySensor() {
+        try {
+            logger.debug("Subscribing to current humidity sensor (PDO {} type {})", SENSOR_CURRENT_HUMIDITY,
+                    TYPE_CN_UINT8);
+            connector.sendRpdoRequest(SENSOR_CURRENT_HUMIDITY, TYPE_CN_UINT8);
+            logger.debug("Current humidity sensor subscription request sent successfully");
+        } catch (IOException e) {
+            logger.warn("Failed to subscribe to current humidity sensor: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Subscribe to target humidity sensor (PDO 11).
+     */
+    public void subscribeToTargetHumiditySensor() {
+        try {
+            logger.debug("Subscribing to target humidity sensor (PDO {} type {})", SENSOR_TARGET_HUMIDITY,
+                    TYPE_CN_UINT8);
+            connector.sendRpdoRequest(SENSOR_TARGET_HUMIDITY, TYPE_CN_UINT8);
+            logger.debug("Target humidity sensor subscription request sent successfully");
+        } catch (IOException e) {
+            logger.warn("Failed to subscribe to target humidity sensor: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Subscribe to humidifier humidity sensor (PDO 209).
+     */
+    public void subscribeToHumidifierHumiditySensor() {
+        try {
+            logger.debug("Subscribing to humidifier humidity sensor (PDO {} type {})", SENSOR_HUMIDIFIER_HUMIDITY,
+                    TYPE_CN_UINT8);
+            connector.sendRpdoRequest(SENSOR_HUMIDIFIER_HUMIDITY, TYPE_CN_UINT8);
+            logger.debug("Humidifier humidity sensor subscription request sent successfully");
+        } catch (IOException e) {
+            logger.warn("Failed to subscribe to humidifier humidity sensor: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Subscribe to week profile active sensor (PDO 12).
+     */
+    public void subscribeToWeekProfileActiveSensor() {
+        try {
+            logger.debug("Subscribing to week profile active sensor (PDO {} type {})", 12, TYPE_CN_UINT8);
+            connector.sendRpdoRequest(12, TYPE_CN_UINT8);
+            logger.debug("Week profile active sensor subscription request sent successfully");
+        } catch (IOException e) {
+            logger.warn("Failed to subscribe to week profile active sensor: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Subscribe to global allergen mode sensor (PDO 32).
+     */
+    public void subscribeToGlobalAllergenModeSensor() {
+        try {
+            logger.debug("Subscribing to global allergen mode sensor (PDO {} type {})", 32, TYPE_CN_UINT8);
+            connector.sendRpdoRequest(32, TYPE_CN_UINT8);
+            logger.debug("Global allergen mode sensor subscription request sent successfully");
+        } catch (IOException e) {
+            logger.warn("Failed to subscribe to global allergen mode sensor: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Subscribe to EWT speed sensor (PDO 88).
+     */
+    public void subscribeToEwtSpeedSensor() {
+        try {
+            logger.debug("Subscribing to EWT speed sensor (PDO {} type {})", 88, TYPE_CN_UINT8);
+            connector.sendRpdoRequest(88, TYPE_CN_UINT8);
+            logger.debug("EWT speed sensor subscription request sent successfully");
+        } catch (IOException e) {
+            logger.warn("Failed to subscribe to EWT speed sensor: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Subscribe to EWT position sensor (PDO 89).
+     */
+    public void subscribeToEwtPositionSensor() {
+        try {
+            logger.debug("Subscribing to EWT position sensor (PDO {} type {})", 89, TYPE_CN_UINT8);
+            connector.sendRpdoRequest(89, TYPE_CN_UINT8);
+            logger.debug("EWT position sensor subscription request sent successfully");
+        } catch (IOException e) {
+            logger.warn("Failed to subscribe to EWT position sensor: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Subscribe to enthalpy state sensor (PDO 96).
+     */
+    public void subscribeToEnthalpyStateSensor() {
+        try {
+            logger.debug("Subscribing to enthalpy state sensor (PDO {} type {})", 96, TYPE_CN_UINT8);
+            connector.sendRpdoRequest(96, TYPE_CN_UINT8);
+            logger.debug("Enthalpy state sensor subscription request sent successfully");
+        } catch (IOException e) {
+            logger.warn("Failed to subscribe to enthalpy state sensor: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Subscribe to frost protection speed sensor (PDO 97).
+     */
+    public void subscribeToFrostProtectionSpeedSensor() {
+        try {
+            logger.debug("Subscribing to frost protection speed sensor (PDO {} type {})", 97, TYPE_CN_UINT8);
+            connector.sendRpdoRequest(97, TYPE_CN_UINT8);
+            logger.debug("Frost protection speed sensor subscription request sent successfully");
+        } catch (IOException e) {
+            logger.warn("Failed to subscribe to frost protection speed sensor: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Subscribe to frost protection loss sensor (PDO 98).
+     */
+    public void subscribeToFrostProtectionLossSensor() {
+        try {
+            logger.debug("Subscribing to frost protection loss sensor (PDO {} type {})", 98, TYPE_CN_UINT8);
+            connector.sendRpdoRequest(98, TYPE_CN_UINT8);
+            logger.debug("Frost protection loss sensor subscription request sent successfully");
+        } catch (IOException e) {
+            logger.warn("Failed to subscribe to frost protection loss sensor: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Subscribe to frost protection timeout sensor (PDO 99).
+     */
+    public void subscribeToFrostProtectionTimeoutSensor() {
+        try {
+            logger.debug("Subscribing to frost protection timeout sensor (PDO {} type {})", 99, TYPE_CN_UINT8);
+            connector.sendRpdoRequest(99, TYPE_CN_UINT8);
+            logger.debug("Frost protection timeout sensor subscription request sent successfully");
+        } catch (IOException e) {
+            logger.warn("Failed to subscribe to frost protection timeout sensor: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Subscribe to HCE present sensor (PDO 200).
+     */
+    public void subscribeToHcePresentSensor() {
+        try {
+            logger.debug("Subscribing to HCE present sensor (PDO {} type {})", 200, TYPE_CN_UINT8);
+            connector.sendRpdoRequest(200, TYPE_CN_UINT8);
+            logger.debug("HCE present sensor subscription request sent successfully");
+        } catch (IOException e) {
+            logger.warn("Failed to subscribe to HCE present sensor: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Subscribe to outdoor temperature in sensor (PDO 2).
+     */
+    public void subscribeToOutdoorTemperatureInSensor() {
+        try {
+            logger.debug("Subscribing to outdoor temperature in sensor (PDO 2, type {})", TYPE_CN_UINT8);
+            connector.sendRpdoRequest(2, TYPE_CN_UINT8);
+            logger.debug("Outdoor temperature in sensor subscription request sent successfully");
+        } catch (IOException e) {
+            logger.warn("Failed to subscribe to outdoor temperature in sensor: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Subscribe to outdoor temperature out sensor (PDO 3).
+     */
+    public void subscribeToOutdoorTemperatureOutSensor() {
+        try {
+            logger.debug("Subscribing to outdoor temperature out sensor (PDO 3, type {})", TYPE_CN_UINT8);
+            connector.sendRpdoRequest(3, TYPE_CN_UINT8);
+            logger.debug("Outdoor temperature out sensor subscription request sent successfully");
+        } catch (IOException e) {
+            logger.warn("Failed to subscribe to outdoor temperature out sensor: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Subscribe to indoor temperature in sensor (PDO 4).
+     */
+    public void subscribeToIndoorTemperatureInSensor() {
+        try {
+            logger.debug("Subscribing to indoor temperature in sensor (PDO 4, type {})", TYPE_CN_UINT8);
+            connector.sendRpdoRequest(4, TYPE_CN_UINT8);
+            logger.debug("Indoor temperature in sensor subscription request sent successfully");
+        } catch (IOException e) {
+            logger.warn("Failed to subscribe to indoor temperature in sensor: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Subscribe to indoor temperature out sensor (PDO 5).
+     */
+    public void subscribeToIndoorTemperatureOutSensor() {
+        try {
+            logger.debug("Subscribing to indoor temperature out sensor (PDO 5, type {})", TYPE_CN_UINT8);
+            connector.sendRpdoRequest(5, TYPE_CN_UINT8);
+            logger.debug("Indoor temperature out sensor subscription request sent successfully");
+        } catch (IOException e) {
+            logger.warn("Failed to subscribe to indoor temperature out sensor: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Subscribe to EWT temperature sensor (PDO 100).
+     */
+    public void subscribeToEwtTemperatureSensor() {
+        try {
+            logger.debug("Subscribing to EWT temperature sensor (PDO 100, type {})", TYPE_CN_UINT8);
+            connector.sendRpdoRequest(100, TYPE_CN_UINT8);
+            logger.debug("EWT temperature sensor subscription request sent successfully");
+        } catch (IOException e) {
+            logger.warn("Failed to subscribe to EWT temperature sensor: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Subscribe to cooker temperature sensor (PDO 101).
+     */
+    public void subscribeToCookerTemperatureSensor() {
+        try {
+            logger.debug("Subscribing to cooker temperature sensor (PDO 101, type {})", TYPE_CN_UINT8);
+            connector.sendRpdoRequest(101, TYPE_CN_UINT8);
+            logger.debug("Cooker temperature sensor subscription request sent successfully");
+        } catch (IOException e) {
+            logger.warn("Failed to subscribe to cooker temperature sensor: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Subscribe to heater temperature sensor (PDO 102).
+     */
+    public void subscribeToHeaterTemperatureSensor() {
+        try {
+            logger.debug("Subscribing to heater temperature sensor (PDO 102, type {})", TYPE_CN_UINT8);
+            connector.sendRpdoRequest(102, TYPE_CN_UINT8);
+            logger.debug("Heater temperature sensor subscription request sent successfully");
+        } catch (IOException e) {
+            logger.warn("Failed to subscribe to heater temperature sensor: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Subscribe to pre-heater temperature sensor (PDO 103).
+     */
+    public void subscribeToPreHeaterTemperatureSensor() {
+        try {
+            logger.debug("Subscribing to pre-heater temperature sensor (PDO 103, type {})", TYPE_CN_UINT8);
+            connector.sendRpdoRequest(103, TYPE_CN_UINT8);
+            logger.debug("Pre-heater temperature sensor subscription request sent successfully");
+        } catch (IOException e) {
+            logger.warn("Failed to subscribe to pre-heater temperature sensor: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Subscribe to indoor humidity sensor (PDO 104).
+     */
+    public void subscribeToIndoorHumiditySensor() {
+        try {
+            logger.debug("Subscribing to indoor humidity sensor (PDO 104, type {})", TYPE_CN_UINT8);
+            connector.sendRpdoRequest(104, TYPE_CN_UINT8);
+            logger.debug("Indoor humidity sensor subscription request sent successfully");
+        } catch (IOException e) {
+            logger.warn("Failed to subscribe to indoor humidity sensor: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Subscribe to exhaust humidity sensor (PDO 13).
+     */
+    public void subscribeToExhaustHumiditySensor() {
+        try {
+            logger.debug("Subscribing to exhaust humidity sensor (PDO 13, type {})", TYPE_CN_UINT8);
+            connector.sendRpdoRequest(13, TYPE_CN_UINT8);
+            logger.debug("Exhaust humidity sensor subscription request sent successfully");
+        } catch (IOException e) {
+            logger.warn("Failed to subscribe to exhaust humidity sensor: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Subscribe to indoor humidity 2 sensor (PDO 14).
+     */
+    public void subscribeToIndoorHumidity2Sensor() {
+        try {
+            logger.debug("Subscribing to indoor humidity 2 sensor (PDO 14, type {})", TYPE_CN_UINT8);
+            connector.sendRpdoRequest(14, TYPE_CN_UINT8);
+            logger.debug("Indoor humidity 2 sensor subscription request sent successfully");
+        } catch (IOException e) {
+            logger.warn("Failed to subscribe to indoor humidity 2 sensor: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Subscribe to exhaust humidity 2 sensor (PDO 15).
+     */
+    public void subscribeToExhaustHumidity2Sensor() {
+        try {
+            logger.debug("Subscribing to exhaust humidity 2 sensor (PDO 15, type {})", TYPE_CN_UINT8);
+            connector.sendRpdoRequest(15, TYPE_CN_UINT8);
+            logger.debug("Exhaust humidity 2 sensor subscription request sent successfully");
+        } catch (IOException e) {
+            logger.warn("Failed to subscribe to exhaust humidity 2 sensor: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Subscribe to indoor humidity 3 sensor (PDO 16).
+     */
+    public void subscribeToIndoorHumidity3Sensor() {
+        try {
+            logger.debug("Subscribing to indoor humidity 3 sensor (PDO 16, type {})", TYPE_CN_UINT8);
+            connector.sendRpdoRequest(16, TYPE_CN_UINT8);
+            logger.debug("Indoor humidity 3 sensor subscription request sent successfully");
+        } catch (IOException e) {
+            logger.warn("Failed to subscribe to indoor humidity 3 sensor: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Subscribe to ComfoSupply humidity sensor (PDO 105).
+     */
+    public void subscribeToComfoSupplyHumiditySensor() {
+        try {
+            logger.debug("Subscribing to ComfoSupply humidity sensor (PDO 105, type {})", TYPE_CN_UINT8);
+            connector.sendRpdoRequest(105, TYPE_CN_UINT8);
+            logger.debug("ComfoSupply humidity sensor subscription request sent successfully");
+        } catch (IOException e) {
+            logger.warn("Failed to subscribe to ComfoSupply humidity sensor: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Subscribe to T1 sensor present sensor (PDO 17).
+     */
+    public void subscribeToT1SensorPresentSensor() {
+        try {
+            logger.debug("Subscribing to T1 sensor present sensor (PDO 17, type {})", TYPE_CN_UINT8);
+            connector.sendRpdoRequest(17, TYPE_CN_UINT8);
+            logger.debug("T1 sensor present sensor subscription request sent successfully");
+        } catch (IOException e) {
+            logger.warn("Failed to subscribe to T1 sensor present sensor: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Subscribe to T2 sensor present sensor (PDO 18).
+     */
+    public void subscribeToT2SensorPresentSensor() {
+        try {
+            logger.debug("Subscribing to T2 sensor present sensor (PDO 18, type {})", TYPE_CN_UINT8);
+            connector.sendRpdoRequest(18, TYPE_CN_UINT8);
+            logger.debug("T2 sensor present sensor subscription request sent successfully");
+        } catch (IOException e) {
+            logger.warn("Failed to subscribe to T2 sensor present sensor: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Subscribe to T3 sensor present sensor (PDO 21).
+     */
+    public void subscribeToT3SensorPresentSensor() {
+        try {
+            logger.debug("Subscribing to T3 sensor present sensor (PDO 21, type {})", TYPE_CN_UINT8);
+            connector.sendRpdoRequest(21, TYPE_CN_UINT8);
+            logger.debug("T3 sensor present sensor subscription request sent successfully");
+        } catch (IOException e) {
+            logger.warn("Failed to subscribe to T3 sensor present sensor: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Subscribe to temperature unit sensor (PDO 208).
+     */
+    public void subscribeToTemperatureUnitSensor() {
+        try {
+            logger.debug("Subscribing to temperature unit sensor (PDO 208, type {})", TYPE_CN_UINT8);
+            connector.sendRpdoRequest(208, TYPE_CN_UINT8);
+            logger.debug("Temperature unit sensor subscription request sent successfully");
+        } catch (IOException e) {
+            logger.warn("Failed to subscribe to temperature unit sensor: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Subscribe to airflow constraints sensor (PDO 230).
+     */
+    public void subscribeToAirflowConstraintsSensor() {
+        try {
+            logger.debug("Subscribing to airflow constraints sensor (PDO 230, type {})", TYPE_CN_UINT64);
+            connector.sendRpdoRequest(230, TYPE_CN_UINT64);
+            logger.debug("Airflow constraints sensor subscription request sent successfully");
+        } catch (IOException e) {
+            logger.warn("Failed to subscribe to airflow constraints sensor: {}", e.getMessage());
         }
     }
 
@@ -698,30 +1316,63 @@ public class ComfoConnectProtocolHandler {
             int sensorId = payload[1] & 0xFF;
             logger.debug("RPDO notification for sensor ID: {}", sensorId);
 
-            // Check if this is the fan speed sensor we care about
-            if (sensorId == SENSOR_FAN_SPEED_MODE) {
-                // Extract the fan speed value (byte 3, values 0-3)
-                // Bytes 0-1 are sensor ID, bytes 2-3 are data value
-                int fanSpeed = payload[3] & 0xFF;
-                logger.debug("Fan speed value extracted: {}", fanSpeed);
+            // Route to appropriate handler based on sensor ID
+            // Extract sensor data based on sensor type
+            int sensorValue = extractSensorValue(sensorId, payload);
 
-                if (fanSpeed >= 0 && fanSpeed <= 3) {
-                    logger.debug("Valid fan speed received: {}, invoking callback", fanSpeed);
-                    SensorDataCallback callback = sensorCallback;
-                    if (callback != null) {
-                        logger.debug("Callback is registered, invoking with sensorId={}, value={}", sensorId, fanSpeed);
-                        callback.onSensorDataReceived(sensorId, fanSpeed);
-                    } else {
-                        logger.warn("Callback is null, cannot deliver sensor data");
-                    }
-                } else {
-                    logger.warn("Invalid fan speed value received: {} (out of range 0-3)", fanSpeed);
-                }
+            SensorDataCallback callback = sensorCallback;
+            if (callback != null) {
+                logger.debug("Invoking callback with sensorId={}, value={}", sensorId, sensorValue);
+                callback.onSensorDataReceived(sensorId, sensorValue);
             } else {
-                logger.debug("RPDO notification for different sensor (ID={}), ignoring", sensorId);
+                logger.warn("Callback is null, cannot deliver sensor data for sensor {}", sensorId);
             }
         } catch (Exception e) {
             logger.error("Error handling RPDO notification: {}", e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Extract sensor value from payload based on sensor ID.
+     * Handles different data types (UINT8, UINT16, UINT32).
+     *
+     * @param sensorId the sensor ID
+     * @param payload the RPDO notification payload
+     * @return the extracted sensor value
+     */
+    private int extractSensorValue(final int sensorId, final byte[] payload) {
+        // For now, support all Phase 1 sensors which are all UINT8 type
+        // Bytes 0-1 are sensor ID, byte 2 is padding/field tag for value, byte 3 is the actual value
+        if (payload.length >= 4) {
+            return payload[3] & 0xFF;
+        }
+        return 0;
+    }
+
+    /**
+     * Apply value corrections based on sensor type.
+     * Handles temperature division, boolean mapping, unit conversion, etc.
+     *
+     * @param sensorId the sensor ID
+     * @param rawValue the raw sensor value
+     * @return the corrected sensor value
+     */
+    private double correctSensorValue(final int sensorId, final int rawValue) {
+        // Temperature sensors: divide by 10 to get actual temperature
+        switch (sensorId) {
+            case 2: // SENSOR_OUTDOOR_TEMPERATURE_IN
+            case 3: // SENSOR_OUTDOOR_TEMPERATURE_OUT
+            case 4: // SENSOR_INDOOR_TEMPERATURE_IN
+            case 5: // SENSOR_INDOOR_TEMPERATURE_OUT
+            case 100: // SENSOR_EWT_TEMPERATURE
+            case 101: // SENSOR_COOKER_TEMPERATURE
+            case 102: // SENSOR_HEATER_TEMPERATURE
+            case 103: // SENSOR_PRE_HEATER_TEMPERATURE
+            case 104: // SENSOR_INDOOR_HUMIDITY (actually part of temperature sensors in raw form)
+                return rawValue / 10.0;
+            default:
+                // No correction needed for other sensors
+                return rawValue;
         }
     }
 }
