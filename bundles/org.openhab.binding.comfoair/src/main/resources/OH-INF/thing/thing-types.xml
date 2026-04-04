@@ -82,7 +82,7 @@
 	</thing-type>
 
 	<bridge-type id="comfoconnect-lan">
-		<label>ComfoConnect LAN Gateway (Q-Series)</label>
+		<label>ComfoConnect LAN (Q-Series)</label>
 		<description>Zehnder ComfoConnect LAN gateway for newer Q-series ventilation devices</description>
 		<semantic-equipment-tag>HVAC</semantic-equipment-tag>
 

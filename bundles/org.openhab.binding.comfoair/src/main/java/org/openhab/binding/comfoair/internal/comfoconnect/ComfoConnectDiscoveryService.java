@@ -242,7 +242,7 @@ public class ComfoConnectDiscoveryService extends AbstractDiscoveryService {
         properties.put("gatewayUuid", uuid); // Store the gateway UUID from discovery
 
         thingDiscovered(DiscoveryResultBuilder.create(thingUID).withProperties(properties)
-                .withLabel("ComfoConnect Gateway (" + ipAddress + ")").build());
+                .withLabel("ComfoConnect LAN (" + ipAddress + ")").build());
     }
 
     /**
