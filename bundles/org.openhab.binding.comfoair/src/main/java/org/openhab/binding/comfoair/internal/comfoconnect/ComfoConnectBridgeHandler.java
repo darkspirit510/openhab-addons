@@ -186,6 +186,9 @@ public class ComfoConnectBridgeHandler extends BaseBridgeHandler {
             // Register sensor data callback before protocol initialization
             protocolHandler.setSensorCallback(this::handleSensorData);
 
+            // Register keep-alive failure callback
+            protocolHandler.setKeepAliveFailureCallback(this::handleKeepAliveFailure);
+
             // Start the message consumer loop BEFORE protocol initialization
             // so responses can be received and processed
             startMessageConsumer(connector, protocolHandler);
@@ -820,5 +823,19 @@ public class ComfoConnectBridgeHandler extends BaseBridgeHandler {
         } catch (Exception e) {
             logger.warn("Error subscribing to sensor {}: {}", sensorId, e.getMessage());
         }
+    }
+
+    /**
+     * Handle keep-alive failure by marking bridge offline and scheduling a fresh reconnection.
+     */
+    private void handleKeepAliveFailure() {
+        logger.warn("Keep-alive timeout detected, attempting fresh connection");
+        updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
+                "Gateway connection lost: Keep-alive timeout");
+        ComfoConnectProtocolHandler handler = protocolHandler;
+        if (handler != null) {
+            handler.stopKeepAliveTimer();
+        }
+        scheduler.schedule(this::connect, 5, TimeUnit.SECONDS);
     }
 }

@@ -211,6 +211,21 @@ public class ComfoConnectDiscoveryService extends AbstractDiscoveryService {
     }
 
     /**
+     * Extract the last segment (last 12 characters) from a UUID string.
+     * UUID format: xxxxxxxx-xxxx-xxxx-xxxx-XXXXXXXXXXXX -> returns XXXXXXXXXXXX
+     *
+     * @param uuid the full UUID string
+     * @return the last 12-character segment
+     */
+    private String extractUuidSuffix(String uuid) {
+        int lastDashIndex = uuid.lastIndexOf('-');
+        if (lastDashIndex >= 0 && lastDashIndex < uuid.length() - 1) {
+            return uuid.substring(lastDashIndex + 1);
+        }
+        return uuid; // Fallback to full UUID if format is unexpected
+    }
+
+    /**
      * Create and post a DiscoveryResult for a discovered gateway.
      *
      * @param uuid the gateway UUID
@@ -218,7 +233,8 @@ public class ComfoConnectDiscoveryService extends AbstractDiscoveryService {
      */
     private void createDiscoveryResult(String uuid, String ipAddress) {
         ThingTypeUID thingTypeUID = ComfoAirBindingConstants.THING_TYPE_COMFOCONNECT_LAN_BRIDGE;
-        ThingUID thingUID = new ThingUID(thingTypeUID, uuid);
+        String uuidSuffix = extractUuidSuffix(uuid);
+        ThingUID thingUID = new ThingUID(thingTypeUID, uuidSuffix);
 
         Map<String, Object> properties = new HashMap<>();
         properties.put("ipAddress", ipAddress);

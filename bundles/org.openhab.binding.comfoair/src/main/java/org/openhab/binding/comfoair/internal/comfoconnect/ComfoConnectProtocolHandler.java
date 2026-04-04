@@ -125,6 +125,7 @@ public class ComfoConnectProtocolHandler {
     private static final int SENSOR_AIRFLOW_CONSTRAINTS = 230; // TYPE_CN_UINT64, requires bit-shifting
 
     private @Nullable SensorDataCallback sensorCallback;
+    private @Nullable Runnable onKeepAliveFailure;
 
     private volatile boolean sessionActive = false;
     private volatile int nextReference = 1;
@@ -503,6 +504,15 @@ public class ComfoConnectProtocolHandler {
     }
 
     /**
+     * Set the callback to be invoked when keep-alive fails.
+     *
+     * @param callback the callback to invoke on keep-alive failure
+     */
+    public void setKeepAliveFailureCallback(final Runnable callback) {
+        this.onKeepAliveFailure = callback;
+    }
+
+    /**
      * Start the keep-alive timer.
      */
     private void startKeepAliveTimer() {
@@ -515,7 +525,7 @@ public class ComfoConnectProtocolHandler {
     /**
      * Stop the keep-alive timer.
      */
-    private void stopKeepAliveTimer() {
+    public void stopKeepAliveTimer() {
         ScheduledFuture<?> task = keepAliveTask;
         if (task != null) {
             task.cancel(false);
@@ -536,7 +546,11 @@ public class ComfoConnectProtocolHandler {
             connector.sendMessage(frame);
             logger.trace("Sent keep-alive message (reference {})", reference);
         } catch (IOException e) {
-            logger.warn("Error sending keep-alive: {}", e.getMessage());
+            logger.warn("Keep-alive failed: {}", e.getMessage());
+            Runnable callback = onKeepAliveFailure;
+            if (callback != null) {
+                callback.run();
+            }
         }
     }
 
