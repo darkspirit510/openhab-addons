@@ -81,7 +81,7 @@
 
 	</thing-type>
 
-	<bridge-type id="comfoconnect-lan">
+	<thing-type id="comfoconnect-lan">
 		<label>ComfoConnect LAN (Q-Series)</label>
 		<description>Zehnder ComfoConnect LAN gateway for newer Q-series ventilation devices</description>
 		<semantic-equipment-tag>HVAC</semantic-equipment-tag>
@@ -139,7 +139,7 @@
 
 		<config-description-ref uri="thing-type:comfoair:comfoconnect-lan"/>
 
-	</bridge-type>
+	</thing-type>
 
 	<channel-group-type id="bindingControl">
 		<label>Binding Control</label>

@@ -193,9 +193,9 @@ public class ComfoConnectProtocolHandler {
         startSession();
         startKeepAliveTimer();
 
-        // Note: Sensor subscriptions are now handled by the BridgeHandler.
+        // Note: Sensor subscriptions are now handled by the ComfoConnectHandler.
         // It will subscribe to sensors based on which channels are linked.
-        // See ComfoConnectBridgeHandler.subscribeToLinkedChannels()
+        // See ComfoConnectHandler.subscribeToLinkedChannels()
 
         sessionActive = true;
         logger.info("ComfoConnect protocol initialized successfully");

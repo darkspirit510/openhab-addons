@@ -31,12 +31,12 @@ import org.openhab.core.library.types.QuantityType;
 import org.openhab.core.library.types.StringType;
 import org.openhab.core.library.unit.SIUnits;
 import org.openhab.core.library.unit.Units;
-import org.openhab.core.thing.Bridge;
 import org.openhab.core.thing.Channel;
 import org.openhab.core.thing.ChannelUID;
+import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingStatus;
 import org.openhab.core.thing.ThingStatusDetail;
-import org.openhab.core.thing.binding.BaseBridgeHandler;
+import org.openhab.core.thing.binding.BaseThingHandler;
 import org.openhab.core.types.Command;
 import org.openhab.core.types.UnDefType;
 import org.slf4j.Logger;
@@ -45,7 +45,7 @@ import org.slf4j.LoggerFactory;
 import com.zehnder.proto.Zehnder;
 
 /**
- * Bridge handler for ComfoConnect LAN gateway devices (newer Q-series).
+ * Handler for ComfoConnect LAN gateway devices (newer Q-series).
  *
  * Manages:
  * - TCP connection to the gateway
@@ -54,12 +54,12 @@ import com.zehnder.proto.Zehnder;
  * @author Sascha Knoop - Initial contribution
  */
 @NonNullByDefault
-public class ComfoConnectBridgeHandler extends BaseBridgeHandler {
+public class ComfoConnectHandler extends BaseThingHandler {
 
     private static final int CONNECT_TIMEOUT_SEC = 30;
     private static final int CONNECTION_ATTEMPT_DELAY_SEC = 5;
 
-    private final Logger logger = LoggerFactory.getLogger(ComfoConnectBridgeHandler.class);
+    private final Logger logger = LoggerFactory.getLogger(ComfoConnectHandler.class);
 
     private @Nullable ComfoConnectTcpConnector connector;
     private @Nullable ComfoConnectProtocolHandler protocolHandler;
@@ -67,22 +67,22 @@ public class ComfoConnectBridgeHandler extends BaseBridgeHandler {
     private @Nullable Future<?> messageConsumerTask;
 
     /**
-     * Create a new ComfoConnect bridge handler.
+     * Create a new ComfoConnect handler.
      *
-     * @param bridge the bridge thing
+     * @param thing the thing
      */
-    public ComfoConnectBridgeHandler(final Bridge bridge) {
-        super(bridge);
+    public ComfoConnectHandler(final Thing thing) {
+        super(thing);
     }
 
     @Override
     public void handleCommand(ChannelUID channelUID, Command command) {
-        logger.debug("Bridge received command on {}: {}", channelUID, command);
+        logger.debug("ComfoConnect handler received command on {}: {}", channelUID, command);
     }
 
     @Override
     public void initialize() {
-        logger.info("Initializing ComfoConnect bridge: {}", getThing().getUID());
+        logger.info("Initializing ComfoConnect device: {}", getThing().getUID());
 
         ComfoConnectConfiguration config = getConfigAs(ComfoConnectConfiguration.class);
 

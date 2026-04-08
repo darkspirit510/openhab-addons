@@ -55,7 +55,7 @@ public class ComfoConnectDiscoveryService extends AbstractDiscoveryService {
     private static final int GATEWAY_PORT = 56747;
     private static final byte[] DISCOVERY_MESSAGE = { 0x0a, 0x00 };
     private static final Set<ThingTypeUID> DISCOVERABLE_THINGS = Collections
-            .unmodifiableSet(Set.of(ComfoAirBindingConstants.THING_TYPE_COMFOCONNECT_LAN_BRIDGE));
+            .unmodifiableSet(Set.of(ComfoAirBindingConstants.THING_TYPE_COMFOCONNECT_LAN));
 
     private @Nullable NetworkAddressService networkAddressService;
 
@@ -232,7 +232,7 @@ public class ComfoConnectDiscoveryService extends AbstractDiscoveryService {
      * @param ipAddress the gateway IP address
      */
     private void createDiscoveryResult(String uuid, String ipAddress) {
-        ThingTypeUID thingTypeUID = ComfoAirBindingConstants.THING_TYPE_COMFOCONNECT_LAN_BRIDGE;
+        ThingTypeUID thingTypeUID = ComfoAirBindingConstants.THING_TYPE_COMFOCONNECT_LAN;
         String uuidSuffix = extractUuidSuffix(uuid);
         ThingUID thingUID = new ThingUID(thingTypeUID, uuidSuffix);
 
