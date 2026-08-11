@@ -15,6 +15,8 @@ package org.openhab.binding.comfoair.internal.comfoconnect;
 import org.openhab.binding.comfoair.internal.comfoconnect.misc.SensorDataCallback;
 import org.openhab.binding.comfoair.internal.comfoconnect.sensor.Sensor;
 
+import com.zehnder.proto.Zehnder;
+
 /**
  * Test callback implementation for capturing sensor data in tests.
  *
@@ -23,13 +25,13 @@ import org.openhab.binding.comfoair.internal.comfoconnect.sensor.Sensor;
 public class TestSensorCallback implements SensorDataCallback {
 
     private Sensor sensor;
-    private int value;
+    private Zehnder.CnRpdoNotification message;
     private boolean called = false;
 
     @Override
-    public void onSensorDataReceived(Sensor sensor, int value) {
+    public void onSensorDataReceived(Sensor sensor, Zehnder.CnRpdoNotification message) {
         this.sensor = sensor;
-        this.value = value;
+        this.message = message;
         this.called = true;
     }
 
@@ -41,7 +43,25 @@ public class TestSensorCallback implements SensorDataCallback {
         return sensor;
     }
 
+    public Zehnder.CnRpdoNotification getMessage() {
+        return message;
+    }
+
+    /**
+     * Get the raw sensor value for backward compatibility with tests.
+     * Extracts the value from the protobuf message.
+     *
+     * @return the raw sensor value
+     */
     public int getValue() {
-        return value;
+        if (message == null || !message.hasData()) {
+            return 0;
+        }
+
+        byte[] data = message.getData().toByteArray();
+        if (data.length >= 4) {
+            return sensor.parseValueFrom(data);
+        }
+        return 0;
     }
 }

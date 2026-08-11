@@ -29,7 +29,6 @@ import org.openhab.binding.comfoair.internal.ComfoAirBindingConstants;
 import org.openhab.binding.comfoair.internal.comfoconnect.response.SearchGatewayResponse;
 import org.openhab.binding.comfoair.internal.comfoconnect.sensor.Sensor;
 import org.openhab.binding.comfoair.internal.comfoconnect.sensor.Sensors;
-import org.openhab.core.library.types.StringType;
 import org.openhab.core.thing.Channel;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
@@ -38,9 +37,10 @@ import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.thing.binding.BaseThingHandler;
 import org.openhab.core.types.Command;
 import org.openhab.core.types.State;
-import org.openhab.core.types.UnDefType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.zehnder.proto.Zehnder;
 
 /**
  * Handler for ComfoConnect LAN gateway devices (newer Q-series).
@@ -319,20 +319,14 @@ public class ComfoConnectHandler extends BaseThingHandler {
      * Handle sensor data received from the gateway.
      *
      * @param sensor the sensor object
-     * @param value the sensor value
+     * @param message the protobuf message containing sensor data
      */
-    private void handleSensorData(final Sensor sensor, final int value) {
-        logger.debug("handleSensorData called: sensor={}, value={}", sensor, value);
+    private void handleSensorData(final Sensor sensor, final Zehnder.CnRpdoNotification message) {
+        logger.debug("handleSensorData called: sensor={}", sensor);
 
-        State state = Sensors.getStateForSensor(sensor.id, value);
+        State state = sensor.valueAsState(message);
 
         if (state != null) {
-            // Special handling for fan speed
-            if (sensor.id == 65) {
-                handleFanSpeedUpdate(value);
-                return;
-            }
-
             // Update the channel state using the sensor's channel ID
             updateChannelState(sensor.channelId, state);
         } else {
@@ -353,28 +347,6 @@ public class ComfoConnectHandler extends BaseThingHandler {
             updateState(channelUID, state);
         } catch (Exception e) {
             logger.error("Error updating channel {}: {}", channelId, e.getMessage(), e);
-        }
-    }
-
-    /**
-     * Handle an update to the fan speed value.
-     *
-     * @param value the fan speed value (0-3)
-     */
-    private void handleFanSpeedUpdate(final int value) {
-        try {
-            logger.debug("handleFanSpeedUpdate called: value={}", value);
-            ChannelUID channelUID = new ChannelUID(getThing().getUID(), "ventilationSpeed");
-
-            if (value >= 0 && value <= 3) {
-                logger.debug("Updating ventilation speed channel to value={}", value);
-                updateState(channelUID, new StringType(String.valueOf(value)));
-            } else {
-                logger.warn("Invalid fan speed value: {} (out of range 0-3)", value);
-                updateState(channelUID, UnDefType.UNDEF);
-            }
-        } catch (Exception e) {
-            logger.error("Error updating ventilation speed channel: {}", e.getMessage(), e);
         }
     }
 

@@ -43,8 +43,8 @@ public class ComfoConnectHandlerTest {
     }
 
     @Test
-    @DisplayName("Test complete message flow: handleIncomingMessage -> handleNotification -> handleRpdoNotification -> callback")
-    public void testCompleteMessageFlow() throws Exception {
+    @DisplayName("Test complete message flow")
+    public void testCompleteMessageFlow() {
         // Use sensor ID 66 (Supply Fan Speed Percentage) which exists in the known sensors
         byte[] rpdoPayload = new byte[] { 0x08, 0x42, 0x12, 0x19 };
 
@@ -67,7 +67,7 @@ public class ComfoConnectHandlerTest {
 
     @Test
     @DisplayName("Test message flow with fan speed sensor (ID 65)")
-    public void testFanSpeedMessageFlow() throws Exception {
+    public void testFanSpeedMessageFlow() {
         byte[] rpdoPayload = new byte[] { 0x08, 0x41, 0x12, 0x02 };
 
         GatewayOperation operation = GatewayOperation.newBuilder()
@@ -89,7 +89,7 @@ public class ComfoConnectHandlerTest {
 
     @Test
     @DisplayName("Test message flow with unknown sensor ID")
-    public void testUnknownSensorMessageFlow() throws Exception {
+    public void testUnknownSensorMessageFlow() {
         byte[] rpdoPayload = new byte[] { 0x08, (byte) 0xE7, 0x03, 0x12, 0x3C };
 
         GatewayOperation operation = GatewayOperation.newBuilder()

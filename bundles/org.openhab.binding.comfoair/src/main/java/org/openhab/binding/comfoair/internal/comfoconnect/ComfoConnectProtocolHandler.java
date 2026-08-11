@@ -661,7 +661,6 @@ public class ComfoConnectProtocolHandler {
             // For PDO sensor ID, we expect: byte 0 = 0x08 (field 1, varint), byte 1 = sensor ID
             int sensorId = payload[1] & 0xFF;
 
-            // Get sensor object for better logging
             Sensor sensor = Sensors.findById(sensorId).orElse(null);
 
             if (sensor == null) {
@@ -672,14 +671,13 @@ public class ComfoConnectProtocolHandler {
             logger.debug("RPDO notification for sensor: {}", sensor);
 
             // Route to appropriate handler based on sensor ID
-            // Extract sensor data based on sensor type
             SensorDataCallback callback = sensorCallback;
 
-            int sensorValue = sensor.parseValueFrom(payload);
-            logger.debug("Invoking callback with sensor={}, value={}", sensor, sensorValue);
-
             if (callback != null) {
-                callback.onSensorDataReceived(sensor, sensorValue);
+                // Create protobuf message with sensor ID as pdid and payload as data
+                Zehnder.CnRpdoNotification message = Zehnder.CnRpdoNotification.newBuilder().setPdid(sensor.id)
+                        .setData(com.google.protobuf.ByteString.copyFrom(payload)).build();
+                callback.onSensorDataReceived(sensor, message);
             }
         } catch (Exception e) {
             logger.error("Error handling RPDO notification: {}", e.getMessage(), e);

@@ -3,6 +3,8 @@ package org.openhab.binding.comfoair.internal.comfoconnect.misc;
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.openhab.binding.comfoair.internal.comfoconnect.sensor.Sensor;
 
+import com.zehnder.proto.Zehnder;
+
 /**
  * Callback interface for receiving sensor data updates from the gateway.
  */
@@ -12,7 +14,7 @@ public interface SensorDataCallback {
      * Called when sensor data is received from the gateway.
      *
      * @param sensor the sensor object
-     * @param value the sensor value
+     * @param message the protobuf message containing sensor data
      */
-    public void onSensorDataReceived(Sensor sensor, int value);
+    public void onSensorDataReceived(Sensor sensor, Zehnder.CnRpdoNotification message);
 }
