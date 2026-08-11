@@ -50,5 +50,11 @@
 			<description>Automatically take over existing session if another app is logged in</description>
 			<default>false</default>
 		</parameter>
+		<parameter name="defaultCommandTimeout" type="integer" min="0" max="86400" unit="s" required="false">
+			<label>Default Command Timeout</label>
+			<description>Timeout in seconds for sending commands to the device</description>
+			<default>3</default>
+			<advanced>true</advanced>
+		</parameter>
 	</config-description>
 </config-description:config-descriptions>

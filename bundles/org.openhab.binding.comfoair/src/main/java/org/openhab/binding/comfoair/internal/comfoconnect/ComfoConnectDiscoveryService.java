@@ -15,9 +15,9 @@ package org.openhab.binding.comfoair.internal.comfoconnect;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
+import java.net.InetAddress;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
@@ -25,6 +25,7 @@ import java.util.Set;
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.comfoair.internal.ComfoAirBindingConstants;
+import org.openhab.binding.comfoair.internal.comfoconnect.response.DiscoveryResponse;
 import org.openhab.core.config.discovery.AbstractDiscoveryService;
 import org.openhab.core.config.discovery.DiscoveryResultBuilder;
 import org.openhab.core.config.discovery.DiscoveryService;
@@ -35,8 +36,6 @@ import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import com.zehnder.proto.Zehnder;
 
 /**
  * Discovery service for ComfoConnect gateways.
@@ -54,18 +53,14 @@ public class ComfoConnectDiscoveryService extends AbstractDiscoveryService {
     private static final int DISCOVERY_TIMEOUT_SECONDS = 3;
     private static final int GATEWAY_PORT = 56747;
     private static final byte[] DISCOVERY_MESSAGE = { 0x0a, 0x00 };
-    private static final Set<ThingTypeUID> DISCOVERABLE_THINGS = Collections
-            .unmodifiableSet(Set.of(ComfoAirBindingConstants.THING_TYPE_COMFOCONNECT_LAN));
+    private static final Set<ThingTypeUID> DISCOVERABLE_THINGS = Set
+            .of(ComfoAirBindingConstants.THING_TYPE_COMFOCONNECT_LAN);
 
     private @Nullable NetworkAddressService networkAddressService;
 
     @Reference
     protected void setNetworkAddressService(final NetworkAddressService networkAddressService) {
         this.networkAddressService = networkAddressService;
-    }
-
-    protected void unsetNetworkAddressService(final NetworkAddressService networkAddressService) {
-        this.networkAddressService = null;
     }
 
     /**
@@ -101,12 +96,14 @@ public class ComfoConnectDiscoveryService extends AbstractDiscoveryService {
      */
     private void discoverGateway() {
         NetworkAddressService nas = networkAddressService;
+
         if (nas == null) {
             logger.warn("NetworkAddressService not available, skipping ComfoConnect gateway discovery");
             return;
         }
 
         String primaryNic = nas.getPrimaryIpv4HostAddress();
+
         if (primaryNic == null || primaryNic.isEmpty()) {
             logger.warn(
                     "Primary network interface not configured in openHAB. Please configure the primary network interface in openHAB settings to enable ComfoConnect gateway discovery.");
@@ -114,6 +111,7 @@ public class ComfoConnectDiscoveryService extends AbstractDiscoveryService {
         }
 
         String broadcastAddress = nas.getConfiguredBroadcastAddress();
+
         if (broadcastAddress == null || broadcastAddress.isEmpty()) {
             logger.warn(
                     "Broadcast address not configured in openHAB. Please configure network settings to enable ComfoConnect gateway discovery. You can manually add the gateway by specifying its IP address.");
@@ -129,10 +127,10 @@ public class ComfoConnectDiscoveryService extends AbstractDiscoveryService {
 
             logger.debug("Sending ComfoConnect discovery broadcast to {}:{}", broadcastAddress, GATEWAY_PORT);
             DatagramPacket sendPacket = new DatagramPacket(DISCOVERY_MESSAGE, DISCOVERY_MESSAGE.length,
-                    java.net.InetAddress.getByName(broadcastAddress), GATEWAY_PORT);
+                    InetAddress.getByName(broadcastAddress), GATEWAY_PORT);
             socket.send(sendPacket);
 
-            listenForResponse(socket, packet);
+            waitForDiscoveryResponse(socket, packet);
         } catch (SocketTimeoutException e) {
             logger.debug("ComfoConnect gateway discovery timeout (expected if no gateway on network)");
         } catch (Exception e) {
@@ -146,14 +144,14 @@ public class ComfoConnectDiscoveryService extends AbstractDiscoveryService {
      * @param socket the datagram socket
      * @param packet the packet to receive data into
      */
-    private void listenForResponse(DatagramSocket socket, DatagramPacket packet) {
+    private void waitForDiscoveryResponse(DatagramSocket socket, DatagramPacket packet) {
         try {
             socket.receive(packet);
 
             byte[] data = new byte[packet.getLength()];
             System.arraycopy(packet.getData(), packet.getOffset(), data, 0, packet.getLength());
 
-            parseDiscoveryResponse(data, packet.getAddress().getHostAddress());
+            parseDiscoveryResponse(data);
         } catch (SocketTimeoutException e) {
             logger.debug("ComfoConnect discovery socket timeout");
         } catch (IOException e) {
@@ -167,47 +165,19 @@ public class ComfoConnectDiscoveryService extends AbstractDiscoveryService {
      * Parse a discovery response and create a DiscoveryResult.
      *
      * @param data the raw response data
-     * @param ipAddress the IP address of the responding gateway
      */
-    private void parseDiscoveryResponse(byte[] data, String ipAddress) {
-        try {
-            Zehnder.DiscoveryOperation operation = Zehnder.DiscoveryOperation.parseFrom(data);
+    private void parseDiscoveryResponse(byte[] data) {
+        DiscoveryResponse discoveryResponse = DiscoveryResponse.from(data);
 
-            if (!operation.hasSearchGatewayResponse()) {
-                logger.warn("Received discovery response without SearchGatewayResponse");
-                return;
-            }
-
-            Zehnder.SearchGatewayResponse response = operation.getSearchGatewayResponse();
-            byte[] uuidBytes = response.getUuid().toByteArray();
-            String uuid = bytesToUuid(uuidBytes);
-            String responseIp = response.getIpaddress();
-
-            logger.debug("ComfoConnect gateway discovered: {} at {}", uuid, responseIp);
-            createDiscoveryResult(uuid, responseIp);
-        } catch (Exception e) {
-            logger.warn("Error parsing ComfoConnect discovery response: {}", e.getMessage());
+        if (discoveryResponse == null) {
+            logger.debug("Received discovery response without SearchGatewayResponse");
+            return;
         }
-    }
 
-    /**
-     * Convert 16 bytes to a UUID string.
-     *
-     * @param bytes the 16-byte UUID
-     * @return the UUID as a string
-     */
-    private String bytesToUuid(byte[] bytes) {
-        if (bytes.length != 16) {
-            throw new IllegalArgumentException("UUID bytes must be 16 bytes long");
-        }
-        long most = 0;
-        long least = 0;
-        for (int i = 0; i < 8; i++) {
-            most = (most << 8) | (bytes[i] & 0xFF);
-            least = (least << 8) | (bytes[8 + i] & 0xFF);
-        }
-        java.util.UUID uuid = new java.util.UUID(most, least);
-        return uuid.toString();
+        logger.debug("ComfoConnect gateway discovered: {} at {}", discoveryResponse.getUuid(),
+                discoveryResponse.getResponseIp());
+
+        createDiscoveryResult(discoveryResponse);
     }
 
     /**
@@ -219,30 +189,32 @@ public class ComfoConnectDiscoveryService extends AbstractDiscoveryService {
      */
     private String extractUuidSuffix(String uuid) {
         int lastDashIndex = uuid.lastIndexOf('-');
+
         if (lastDashIndex >= 0 && lastDashIndex < uuid.length() - 1) {
             return uuid.substring(lastDashIndex + 1);
         }
+
         return uuid; // Fallback to full UUID if format is unexpected
     }
 
     /**
      * Create and post a DiscoveryResult for a discovered gateway.
      *
-     * @param uuid the gateway UUID
-     * @param ipAddress the gateway IP address
+     * @param response DiscoveryResponse
      */
-    private void createDiscoveryResult(String uuid, String ipAddress) {
+
+    private void createDiscoveryResult(DiscoveryResponse response) {
         ThingTypeUID thingTypeUID = ComfoAirBindingConstants.THING_TYPE_COMFOCONNECT_LAN;
-        String uuidSuffix = extractUuidSuffix(uuid);
+        String uuidSuffix = extractUuidSuffix(response.getUuid());
         ThingUID thingUID = new ThingUID(thingTypeUID, uuidSuffix);
 
         Map<String, Object> properties = new HashMap<>();
-        properties.put("ipAddress", ipAddress);
-        properties.put("hostname", ipAddress); // Auto-populate hostname with the discovered IP address
-        properties.put("gatewayUuid", uuid); // Store the gateway UUID from discovery
+        properties.put("ipAddress", response.getResponseIp());
+        properties.put("hostname", response.getResponseIp()); // Auto-populate hostname with the discovered IP address
+        properties.put("gatewayUuid", response.getUuid()); // Store the gateway UUID from discovery
 
         thingDiscovered(DiscoveryResultBuilder.create(thingUID).withProperties(properties)
-                .withLabel("ComfoConnect LAN (" + ipAddress + ")").build());
+                .withLabel("ComfoConnect LAN (" + response.getResponseIp() + ")").build());
     }
 
     /**

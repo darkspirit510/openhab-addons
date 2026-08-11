@@ -24,7 +24,6 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
-import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -33,9 +32,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.openhab.core.config.discovery.DiscoveryListener;
 import org.openhab.core.net.NetworkAddressService;
-
-import com.google.protobuf.ByteString;
-import com.zehnder.proto.Zehnder;
 
 /**
  * Test class for {@link ComfoConnectDiscoveryService}.
@@ -61,7 +57,7 @@ public class ComfoConnectDiscoveryServiceTest {
     public void setUp() {
         discoveryService = new ComfoConnectDiscoveryService() {
             @Override
-            protected DatagramSocket createDatagramSocket() throws SocketException {
+            protected DatagramSocket createDatagramSocket() {
                 return mockSocket;
             }
         };
@@ -91,7 +87,7 @@ public class ComfoConnectDiscoveryServiceTest {
     }
 
     @Test
-    public void testSkipsDiscoveryWhenPrimaryNICNotConfigured() throws Exception {
+    public void testSkipsDiscoveryWhenPrimaryNICNotConfigured() {
         // GIVEN: Primary NIC is not configured
         when(mockNetworkAddressService.getPrimaryIpv4HostAddress()).thenReturn(null);
 
@@ -103,7 +99,7 @@ public class ComfoConnectDiscoveryServiceTest {
     }
 
     @Test
-    public void testSkipsDiscoveryWhenBroadcastAddressNotConfigured() throws Exception {
+    public void testSkipsDiscoveryWhenBroadcastAddressNotConfigured() {
         // GIVEN: Primary NIC is configured
         when(mockNetworkAddressService.getPrimaryIpv4HostAddress()).thenReturn(PRIMARY_NIC);
 
@@ -155,7 +151,7 @@ public class ComfoConnectDiscoveryServiceTest {
     }
 
     @Test
-    public void testSocketCreationFailure() throws Exception {
+    public void testSocketCreationFailure() {
         // GIVEN: Primary NIC and broadcast address are configured
         when(mockNetworkAddressService.getPrimaryIpv4HostAddress()).thenReturn(PRIMARY_NIC);
         when(mockNetworkAddressService.getConfiguredBroadcastAddress()).thenReturn(BROADCAST_ADDRESS);
@@ -175,27 +171,5 @@ public class ComfoConnectDiscoveryServiceTest {
 
         // THEN: No listener notification, graceful error handling
         verify(mockListener, never()).thingDiscovered(any(), any());
-    }
-
-    /**
-     * Create a valid DiscoveryOperation response with given UUID and IP address.
-     */
-    private byte[] createDiscoveryResponse(String uuid, String ipAddress) {
-        UUID parsedUuid = UUID.fromString(uuid);
-        byte[] uuidBytes = new byte[16];
-        long most = parsedUuid.getMostSignificantBits();
-        long least = parsedUuid.getLeastSignificantBits();
-        for (int i = 0; i < 8; i++) {
-            uuidBytes[i] = (byte) (most >> (8 * (7 - i)));
-            uuidBytes[8 + i] = (byte) (least >> (8 * (7 - i)));
-        }
-
-        Zehnder.SearchGatewayResponse response = Zehnder.SearchGatewayResponse.newBuilder()
-                .setUuid(ByteString.copyFrom(uuidBytes)).setIpaddress(ipAddress).setVersion(1).build();
-
-        Zehnder.DiscoveryOperation operation = Zehnder.DiscoveryOperation.newBuilder()
-                .setSearchGatewayResponse(response).build();
-
-        return operation.toByteArray();
     }
 }

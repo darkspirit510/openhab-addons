@@ -25,6 +25,7 @@ import java.util.UUID;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
+import org.openhab.binding.comfoair.internal.comfoconnect.sensor.Sensors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -167,7 +168,8 @@ public class ComfoConnectTcpConnector extends ComfoConnectConnector {
 
             logger.debug("Created RPDO request frame, length={} bytes", frame.length);
             sendMessage(frame);
-            logger.info("RPDO request sent for sensor {}", pdid);
+            Sensors.findById(pdid).ifPresentOrElse(sensor -> logger.info("RPDO request sent for sensor {}", sensor),
+                    () -> logger.info("RPDO request sent for sensor ??? ({})", pdid));
         } catch (IOException e) {
             logger.error("Failed to send RPDO request: {}", e.getMessage());
             throw e;

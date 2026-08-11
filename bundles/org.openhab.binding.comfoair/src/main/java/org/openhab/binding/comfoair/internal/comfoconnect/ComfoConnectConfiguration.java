@@ -57,4 +57,9 @@ public class ComfoConnectConfiguration {
      * Whether to automatically take over an existing session if another app is logged in.
      */
     public boolean autoTakeover = false;
+
+    /**
+     * Timeout in seconds for sending commands to the device.
+     */
+    public int defaultCommandTimeout = 3;
 }

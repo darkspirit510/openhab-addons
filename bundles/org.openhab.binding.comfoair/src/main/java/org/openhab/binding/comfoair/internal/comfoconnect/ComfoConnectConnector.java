@@ -104,10 +104,15 @@ public abstract class ComfoConnectConnector {
      */
     public byte @org.eclipse.jdt.annotation.Nullable [] getNextMessage() {
         try {
-            return messageQueue.take();
+            byte[] message = messageQueue.take();
+            logger.info("Retrieved message from queue: {} bytes, first byte: 0x{}",
+                    message != null ? message.length : 0,
+                    message != null && message.length > 0 ? String.format("%02X", message[0]) : "N/A");
+            return message;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             logger.debug("getNextMessage interrupted");
+
             return null;
         }
     }
@@ -118,6 +123,7 @@ public abstract class ComfoConnectConnector {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             logger.debug("pollMessage interrupted");
+
             return null;
         }
     }
@@ -138,6 +144,7 @@ public abstract class ComfoConnectConnector {
             if (readerThread != null && readerThread.isAlive()) {
                 logger.warn("Reader thread already running, stopping previous one");
                 readerThread.interrupt();
+
                 try {
                     readerThread.join(1000);
                 } catch (InterruptedException e) {
@@ -161,8 +168,10 @@ public abstract class ComfoConnectConnector {
             if (readerThread != null && readerThread.isAlive()) {
                 logger.debug("Stopping reader thread");
                 readerThread.interrupt();
+
                 try {
                     readerThread.join(2000);
+
                     if (readerThread.isAlive()) {
                         logger.warn("Reader thread did not terminate within timeout");
                     }
@@ -170,6 +179,7 @@ public abstract class ComfoConnectConnector {
                     logger.debug("Interrupted while stopping reader thread");
                     Thread.currentThread().interrupt();
                 }
+
                 readerThread = null;
             }
         }
@@ -186,6 +196,7 @@ public abstract class ComfoConnectConnector {
         if (isShutdown) {
             return false;
         }
+
         return messageQueue.offer(message);
     }
 
