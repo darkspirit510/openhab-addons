@@ -28,6 +28,7 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.comfoair.internal.comfoconnect.misc.PendingRequest;
 import org.openhab.binding.comfoair.internal.comfoconnect.misc.SensorDataCallback;
+import org.openhab.binding.comfoair.internal.comfoconnect.response.Payload;
 import org.openhab.binding.comfoair.internal.comfoconnect.sensor.Sensor;
 import org.openhab.binding.comfoair.internal.comfoconnect.sensor.SensorValueType;
 import org.openhab.binding.comfoair.internal.comfoconnect.sensor.Sensors;
@@ -278,6 +279,8 @@ public class ComfoConnectProtocolHandler {
                 logger.warn("Gateway returned error: {} - {}", operation.getResult(), operation.getResultDescription());
             }
 
+            Payload payload = new Payload(parsed.payload);
+
             switch (operation.getType()) {
                 case KeepAliveType:
                     break;
@@ -287,7 +290,7 @@ public class ComfoConnectProtocolHandler {
                 case CloseSessionConfirmType:
                 case ListRegisteredAppsConfirmType:
                     if (operation.getReference() > 0) {
-                        completeRequest(operation.getReference(), parsed.payload, operation.getResult());
+                        completeRequest(operation.getReference(), payload, operation.getResult());
                     }
                     break;
 
@@ -296,13 +299,13 @@ public class ComfoConnectProtocolHandler {
                 case CnAlarmNotificationType:
                     logger.info("Handling notification: type={}, payload length={}", operation.getType(),
                             parsed.payload.length);
-                    handleNotification(operation, parsed.payload);
+                    handleNotification(operation, payload);
                     break;
 
                 default:
                     // Other async responses (CnRmiAsyncResponse, etc.)
                     if (operation.getReference() > 0) {
-                        completeRequest(operation.getReference(), parsed.payload, operation.getResult());
+                        completeRequest(operation.getReference(), payload, operation.getResult());
                     }
 
                     break;
@@ -484,10 +487,10 @@ public class ComfoConnectProtocolHandler {
      * Complete a pending request with response data.
      *
      * @param reference the request reference
-     * @param payload the response payload bytes
+     * @param payload the response payload
      * @param result the gateway result from the operation
      */
-    private void completeRequest(final int reference, final byte[] payload, final GatewayResult result) {
+    private void completeRequest(final int reference, final Payload payload, final GatewayResult result) {
         PendingRequest<?> pending;
 
         synchronized (pendingRequests) {
@@ -560,9 +563,9 @@ public class ComfoConnectProtocolHandler {
      * Handle asynchronous notifications from the gateway.
      *
      * @param operation the gateway operation
-     * @param payload the payload bytes
+     * @param payload the payload
      */
-    private void handleNotification(final GatewayOperation operation, final byte[] payload) {
+    private void handleNotification(final GatewayOperation operation, final Payload payload) {
         logger.info("Received notification: type={}, payload length={}", operation.getType(), payload.length);
 
         if (operation.getType() == GatewayOperation.OperationType.CnRpdoNotificationType) {
@@ -590,12 +593,12 @@ public class ComfoConnectProtocolHandler {
      * Parse response based on expected type.
      *
      * @param responseClass the expected response class
-     * @param payload the payload bytes
+     * @param payload the payload
      * @return parsed response object
      */
-    private Object parseResponse(final Class<?> responseClass, final byte[] payload) throws IOException {
+    private Object parseResponse(final Class<?> responseClass, final Payload payload) throws IOException {
         if (responseClass == byte[].class) {
-            return payload;
+            return payload.content;
         }
 
         throw new IOException("Unknown response type: " + responseClass.getName());
@@ -648,7 +651,7 @@ public class ComfoConnectProtocolHandler {
      *
      * @param payload the RPDO notification payload
      */
-    private void handleRpdoNotification(final byte[] payload) {
+    private void handleRpdoNotification(final Payload payload) {
         try {
             logger.debug("handleRpdoNotification: payload length={}", payload.length);
 
@@ -657,11 +660,10 @@ public class ComfoConnectProtocolHandler {
                 return;
             }
 
-            int sensorId = (payload[2] & 0xFF) << 8 | (payload[1] & 0xFF);
-            Sensor sensor = Sensors.findById(sensorId).orElse(null);
+            Sensor sensor = Sensors.findById(payload.sensorId()).orElse(null);
 
             if (sensor == null) {
-                logger.warn("Received notification for unknown sensor with ID {}, ignoring it", sensorId);
+                logger.warn("Received notification for unknown sensor with ID {}, ignoring it", payload.sensorId());
                 return;
             }
 
@@ -673,7 +675,7 @@ public class ComfoConnectProtocolHandler {
             if (callback != null) {
                 // Create protobuf message with sensor ID as pdid and payload as data
                 Zehnder.CnRpdoNotification message = Zehnder.CnRpdoNotification.newBuilder().setPdid(sensor.id)
-                        .setData(com.google.protobuf.ByteString.copyFrom(payload)).build();
+                        .setData(com.google.protobuf.ByteString.copyFrom(payload.content)).build();
                 callback.onSensorDataReceived(sensor, message);
             }
         } catch (Exception e) {
