@@ -51,52 +51,98 @@ public class DecimalSensor extends Sensor {
         }
 
         return switch (type) {
-            case TYPE_CN_UINT8 -> payload[3] & 0xFF;
-            case TYPE_CN_UINT16 -> {
-                if (payload.length >= 7) {
-                    yield ((payload[6] & 0xFF) << 8) | (payload[5] & 0xFF);
-                }
-                yield 0;
-            }
-            case TYPE_CN_UINT32 -> {
-                if (payload.length >= 8) {
-                    yield ((payload[7] & 0xFFL) << 24) | ((payload[6] & 0xFFL) << 16) | ((payload[5] & 0xFFL) << 8)
-                            | (payload[4] & 0xFFL);
-                }
-                yield 0;
-            }
-            case TYPE_CN_INT8 -> payload[3];
-            case TYPE_CN_INT16 -> {
-                if (payload.length >= 7) {
-                    int value = ((payload[6] & 0xFF) << 8) | (payload[5] & 0xFF);
-                    if ((value & 0x8000) != 0) {
-                        value -= 0x10000;
-                    }
-                    yield value;
-                }
-                yield 0;
-            }
-            case TYPE_CN_INT64 -> {
-                if (payload.length >= 10) {
-                    yield ((payload[9] & 0xFFL) << 56) | ((payload[8] & 0xFFL) << 48) | ((payload[7] & 0xFFL) << 40)
-                            | ((payload[6] & 0xFFL) << 32) | ((payload[5] & 0xFFL) << 24) | ((payload[4] & 0xFFL) << 16)
-                            | ((payload[3] & 0xFFL) << 8) | (payload[2] & 0xFFL);
-                }
-                yield 0;
-            }
+            case TYPE_CN_UINT8 -> extractUnsignedByte(payload);
+            case TYPE_CN_UINT16 -> extractUnsignedShort(payload);
+            case TYPE_CN_UINT32 -> extractUnsignedInt(payload);
+            case TYPE_CN_INT8 -> extractSignedByte(payload);
+            case TYPE_CN_INT16 -> extractSignedShort(payload);
+            case TYPE_CN_INT64 -> extractSignedLong(payload);
             default -> 0;
         };
     }
 
-    private static int unsigned(byte value) {
-        return value & 0x000000FF;
+    /**
+     * Extract an unsigned 8-bit integer value from the payload.
+     *
+     * @param payload the payload bytes
+     * @return the extracted unsigned byte value
+     */
+    private long extractUnsignedByte(byte[] payload) {
+        return payload[3] & 0xFF;
     }
 
-    private static int unsigned(short value) {
-        return value & 0x0000FFFF;
+    /**
+     * Extract an unsigned 16-bit integer value from the payload.
+     *
+     * @param payload the payload bytes
+     * @return the extracted unsigned short value
+     */
+    private long extractUnsignedShort(byte[] payload) {
+        if (payload.length >= 7) {
+            return ((payload[6] & 0xFF) << 8) | (payload[5] & 0xFF);
+        }
+
+        return 0;
     }
 
-    private static long unsigned(int value) {
-        return value & 0x00000000FFFFFFFFL;
+    /**
+     * Extract an unsigned 32-bit integer value from the payload.
+     *
+     * @param payload the payload bytes
+     * @return the extracted unsigned int value
+     */
+    private long extractUnsignedInt(byte[] payload) {
+        if (payload.length >= 8) {
+            return ((payload[7] & 0xFFL) << 24) | ((payload[6] & 0xFFL) << 16) | ((payload[5] & 0xFFL) << 8)
+                    | (payload[4] & 0xFFL);
+        }
+
+        return 0;
+    }
+
+    /**
+     * Extract a signed 8-bit integer value from the payload.
+     *
+     * @param payload the payload bytes
+     * @return the extracted signed byte value
+     */
+    private long extractSignedByte(byte[] payload) {
+        return payload[3];
+    }
+
+    /**
+     * Extract a signed 16-bit integer value from the payload.
+     *
+     * @param payload the payload bytes
+     * @return the extracted signed short value
+     */
+    private int extractSignedShort(byte[] payload) {
+        if (payload.length >= 7) {
+            int value = ((payload[6] & 0xFF) << 8) | (payload[5] & 0xFF);
+
+            if ((value & 0x8000) != 0) {
+                value -= 0x10000;
+            }
+
+            return value;
+        }
+
+        return 0;
+    }
+
+    /**
+     * Extract a signed 64-bit integer value from the payload.
+     *
+     * @param payload the payload bytes
+     * @return the extracted signed long value
+     */
+    private long extractSignedLong(byte[] payload) {
+        if (payload.length >= 10) {
+            return ((payload[9] & 0xFFL) << 56) | ((payload[8] & 0xFFL) << 48) | ((payload[7] & 0xFFL) << 40)
+                    | ((payload[6] & 0xFFL) << 32) | ((payload[5] & 0xFFL) << 24) | ((payload[4] & 0xFFL) << 16)
+                    | ((payload[3] & 0xFFL) << 8) | (payload[2] & 0xFFL);
+        }
+
+        return 0;
     }
 }

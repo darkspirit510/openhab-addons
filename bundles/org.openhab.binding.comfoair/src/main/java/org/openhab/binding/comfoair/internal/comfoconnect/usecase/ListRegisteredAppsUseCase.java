@@ -88,6 +88,7 @@ public class ListRegisteredAppsUseCase {
         java.nio.ByteBuffer bb = java.nio.ByteBuffer.wrap(bytes);
         long high = bb.getLong();
         long low = bb.getLong();
+
         return new UUID(high, low);
     }
 }
