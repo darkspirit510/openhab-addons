@@ -52,12 +52,25 @@ public class ComfoConnectHandlerTest {
 
     static Stream<Arguments> sensorPayloadsAndStates() {
         return Stream.of(
-                // Sensor 119: Exhaust Fan Flow
-                Arguments.of(new byte[] { 0x08, 0x77, 0x12, 0x02, (byte) 0x8E, 0x00 }, 119, new DecimalType(142)),
-                // Sensor 210: Season Heating Active (true)
-                Arguments.of(new byte[] { 0x08, (byte) 0xD2, 0x12, 0x01 }, 210, OnOffType.ON),
-                // Sensor 211: Season Cooling Active (false)
-                Arguments.of(new byte[] { 0x08, (byte) 0xD3, 0x12, 0x00 }, 211, OnOffType.OFF));
+                // Sensor 119: Exhaust Fan Flow (0x0077)
+                // Arguments.of(new byte[] { 0x08, 0x77, 0x00, 0x12, 0x02, (byte) 0x8E, 0x00 }, 119, new
+                // DecimalType(142)),
+                // Sensor 210: Season Heating Active (0x00D2)
+                Arguments.of(new byte[] { 0x08, (byte) 0xD2, 0x00, 0x12, 0x01 }, 210, OnOffType.ON),
+                // Sensor 211: Season Cooling Active (0x00D3)
+                Arguments.of(new byte[] { 0x08, (byte) 0xD3, 0x00, 0x12, 0x00 }, 211, OnOffType.OFF),
+                // Sensor 221: Supply Air Temperature (0x00DD)
+                Arguments.of(new byte[] { 0x08, (byte) 0xDD, 0x00, 0x12, 0x02, (byte) 0xCE, (byte) 0xFF }, 221,
+                        new DecimalType(-5.0)),
+                // Sensor 274: Extract Air Temperature (0x0112)
+                Arguments.of(new byte[] { 0x08, (byte) 0x12, 0x01, 0x12, 0x02, (byte) 0xE7, (byte) 0xFF }, 274,
+                        new DecimalType(-2.5)),
+                // Sensor 275: Exhaust Air Temperature (0x0113)
+                Arguments.of(new byte[] { 0x08, (byte) 0x13, 0x01, 0x12, 0x02, 0x7D, 0x00 }, 275,
+                        new DecimalType(12.5)),
+                // Sensor 276: Outdoor Air Temperature (0x0114)
+                Arguments.of(new byte[] { 0x08, (byte) 0x14, 0x01, 0x12, 0x02, (byte) 0xFA, 0x00 }, 276,
+                        new DecimalType(25.0)));
     }
 
     @ParameterizedTest

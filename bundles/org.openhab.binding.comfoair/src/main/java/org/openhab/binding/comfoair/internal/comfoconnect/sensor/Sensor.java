@@ -89,17 +89,21 @@ public abstract class Sensor {
                 return payload[3] & 0xFF;
             }
 
-            // For UINT16 sensors: byte 3 is length, bytes 4-5 are value (little-endian)
+            // For UINT16 sensors: byte 4 is length, bytes 5-6 are value (little-endian)
             case TYPE_CN_UINT16 -> {
-                if (payload.length >= 6) {
-                    return ((payload[5] & 0xFF) << 8) | (payload[4] & 0xFF);
+                if (payload.length >= 7) {
+                    return ((payload[6] & 0xFF) << 8) | (payload[5] & 0xFF);
                 }
             }
 
-            // For INT16 sensors: byte 3 is length, bytes 4-5 are value (little-endian, signed)
+            // For INT16 sensors: byte 4 is length, bytes 5-6 are value (little-endian, signed)
             case TYPE_CN_INT16 -> {
-                if (payload.length >= 6) {
-                    return ((payload[5] & 0xFF) << 8) | (payload[4] & 0xFF);
+                if (payload.length >= 7) {
+                    int value = ((payload[6] & 0xFF) << 8) | (payload[5] & 0xFF);
+                    if ((value & 0x8000) != 0) {
+                        value -= 0x10000;
+                    }
+                    return value;
                 }
             }
         }

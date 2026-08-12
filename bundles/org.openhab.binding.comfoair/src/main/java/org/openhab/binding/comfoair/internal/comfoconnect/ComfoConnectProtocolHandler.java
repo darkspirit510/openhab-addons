@@ -657,10 +657,7 @@ public class ComfoConnectProtocolHandler {
                 return;
             }
 
-            // Extract sensor ID (protobuf format: byte 0 is field tag, byte 1 is the value)
-            // For PDO sensor ID, we expect: byte 0 = 0x08 (field 1, varint), byte 1 = sensor ID
-            int sensorId = payload[1] & 0xFF;
-
+            int sensorId = (payload[2] & 0xFF) << 8 | (payload[1] & 0xFF);
             Sensor sensor = Sensors.findById(sensorId).orElse(null);
 
             if (sensor == null) {

@@ -36,12 +36,13 @@ public class BooleanSensor extends Sensor {
     public @Nullable State valueAsState(Zehnder.CnRpdoNotification message) {
         byte[] payload = message.getData().toByteArray();
 
-        if (payload.length < 4) {
+        if (payload.length < 5) {
             return null;
         }
 
-        // For boolean sensors, value is at byte 3 of the RPDO payload
-        int rawValue = payload[3] & 0xFF;
+        // For boolean sensors, value is at byte 4 of the RPDO payload (after 2-byte sensor ID)
+        int rawValue = payload[4] & 0xFF;
+
         return rawValue != 0 ? OnOffType.ON : OnOffType.OFF;
     }
 }

@@ -53,8 +53,8 @@ public class DecimalSensor extends Sensor {
         return switch (type) {
             case TYPE_CN_UINT8 -> payload[3] & 0xFF;
             case TYPE_CN_UINT16 -> {
-                if (payload.length >= 6) {
-                    yield ((payload[5] & 0xFF) << 8) | (payload[4] & 0xFF);
+                if (payload.length >= 7) {
+                    yield ((payload[6] & 0xFF) << 8) | (payload[5] & 0xFF);
                 }
                 yield 0;
             }
@@ -67,8 +67,12 @@ public class DecimalSensor extends Sensor {
             }
             case TYPE_CN_INT8 -> payload[3];
             case TYPE_CN_INT16 -> {
-                if (payload.length >= 6) {
-                    yield ((payload[5] & 0xFF) << 8) | (payload[4] & 0xFF);
+                if (payload.length >= 7) {
+                    int value = ((payload[6] & 0xFF) << 8) | (payload[5] & 0xFF);
+                    if ((value & 0x8000) != 0) {
+                        value -= 0x10000;
+                    }
+                    yield value;
                 }
                 yield 0;
             }
