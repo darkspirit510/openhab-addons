@@ -26,6 +26,7 @@ import java.util.concurrent.TimeoutException;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
+import org.openhab.binding.comfoair.internal.ComfoAirBindingConstants;
 import org.openhab.binding.comfoair.internal.comfoconnect.misc.PendingRequest;
 import org.openhab.binding.comfoair.internal.comfoconnect.misc.SensorDataCallback;
 import org.openhab.binding.comfoair.internal.comfoconnect.response.Payload;
@@ -72,11 +73,13 @@ public class ComfoConnectProtocolHandler {
 
     private @Nullable SensorDataCallback sensorCallback;
     private @Nullable Runnable onKeepAliveFailure;
+    private @Nullable Runnable connectionErrorCallback;
 
     private volatile boolean sessionActive = false;
     private volatile int nextReference = 1;
     private final Map<Integer, PendingRequest<?>> pendingRequests = new HashMap<>();
     private @Nullable ScheduledFuture<?> keepAliveTask;
+    private @Nullable Integer ventilationNodeId;
 
     /**
      * Create a new protocol handler.
@@ -117,6 +120,9 @@ public class ComfoConnectProtocolHandler {
         registerAppIfNeeded();
         startSession();
         startKeepAliveTimer();
+
+        // Discover the ventilation node ID for RMI requests
+        discoverVentilationNode();
 
         // Note: Sensor subscriptions are now handled by the ComfoConnectHandler.
         // It will subscribe to sensors based on which channels are linked.
@@ -295,11 +301,23 @@ public class ComfoConnectProtocolHandler {
                     break;
 
                 case CnNodeNotificationType:
+                    logger.info("Handling node notification: type={}, payload length={}", operation.getType(),
+                            parsed.payload.length);
+                    handleNodeNotification(payload);
+                    break;
+
                 case CnRpdoNotificationType:
                 case CnAlarmNotificationType:
                     logger.info("Handling notification: type={}, payload length={}", operation.getType(),
                             parsed.payload.length);
                     handleNotification(operation, payload);
+                    break;
+
+                case CnRmiResponseType:
+                case CnRmiAsyncResponseType:
+                    logger.info("Handling RMI response: type={}, payload length={}", operation.getType(),
+                            parsed.payload.length);
+                    handleRmiResponse(operation, payload);
                     break;
 
                 default:
@@ -426,6 +444,15 @@ public class ComfoConnectProtocolHandler {
      */
     public void setKeepAliveFailureCallback(final Runnable callback) {
         this.onKeepAliveFailure = callback;
+    }
+
+    /**
+     * Set the callback to be invoked when a connection error occurs.
+     *
+     * @param callback the callback to invoke on connection error
+     */
+    public void setConnectionErrorCallback(final Runnable callback) {
+        this.connectionErrorCallback = callback;
     }
 
     /**
@@ -643,6 +670,65 @@ public class ComfoConnectProtocolHandler {
             logger.debug("Sensor {} subscription request sent successfully", sensor);
         } catch (IOException e) {
             logger.warn("Failed to subscribe to sensor {}: {}", sensor, e.getMessage());
+            // Check if this is a connection-related error and trigger reconnection
+            handleConnectionError(e);
+        }
+    }
+
+    /**
+     * Send an RMI request to the gateway using the discovered ventilation node ID.
+     *
+     * @param unit the RMI unit ID (e.g., UNIT_SCHEDULE = 0x08)
+     * @param subunit the RMI subunit ID (e.g., SUBUNIT_02 = 0x02)
+     * @param propertyId the RMI property ID (e.g., 0x01 for bypass state)
+     * @throws IOException if send fails
+     */
+    public void sendRmiRequest(final int unit, final int subunit, final int propertyId) throws IOException {
+        sendRmiRequest(getVentilationNodeId(), unit, subunit, propertyId);
+    }
+
+    /**
+     * Send an RMI request to the gateway with a specific node ID.
+     *
+     * @param nodeId the ComfoNet node ID (typically 1 for ventilation unit)
+     * @param unit the RMI unit ID (e.g., UNIT_SCHEDULE = 0x08)
+     * @param subunit the RMI subunit ID (e.g., SUBUNIT_02 = 0x02)
+     * @param propertyId the RMI property ID (e.g., 0x01 for bypass state)
+     * @throws IOException if send fails
+     */
+    public void sendRmiRequest(final int nodeId, final int unit, final int subunit, final int propertyId)
+            throws IOException {
+        // Construct RMI message payload: 0x83 (read request), unit, subunit, propertyId
+        byte[] rmiMessage = new byte[] { (byte) 0x83, (byte) unit, (byte) subunit, (byte) propertyId };
+        try {
+            connector.sendRmiRequest(nodeId, rmiMessage);
+        } catch (IOException e) {
+            handleConnectionError(e);
+            throw e;
+        }
+    }
+
+    /**
+     * Handle incoming node notification to discover the ventilation unit.
+     *
+     * @param payload the node notification payload
+     */
+    private void handleNodeNotification(final Payload payload) {
+        try {
+            Zehnder.CnNodeNotification nodeNotification = Zehnder.CnNodeNotification.parseFrom(payload.content);
+            int nodeId = nodeNotification.getNodeId();
+            int productId = nodeNotification.getProductId();
+
+            logger.debug("Node notification: nodeId={}, productId={}", nodeId, productId);
+
+            // Check if this is a ventilation unit (product IDs for Q-Series)
+            // Common ventilation unit product IDs: 0x01, 0x02, 0x03, etc.
+            // For now, assume node ID 1 is the ventilation unit if we haven't discovered it yet
+            if (ventilationNodeId == null) {
+                setVentilationNodeId(nodeId);
+            }
+        } catch (Exception e) {
+            logger.error("Error handling node notification: {}", e.getMessage(), e);
         }
     }
 
@@ -684,6 +770,66 @@ public class ComfoConnectProtocolHandler {
     }
 
     /**
+     * Handle incoming RMI response from the gateway.
+     *
+     * @param operation the gateway operation
+     * @param payload the payload containing the RMI response
+     */
+    private void handleRmiResponse(final GatewayOperation operation, final Payload payload) {
+        try {
+            Zehnder.CnRmiResponse response = Zehnder.CnRmiResponse.parseFrom(payload.content);
+            byte[] data = response.getMessage().toByteArray();
+
+            logger.debug("RMI response: result={}, data length={}", response.getResult(), data.length);
+
+            if (data.length == 0) {
+                logger.warn("Empty RMI response data");
+                return;
+            }
+
+            // For bypass state, the last byte of the response contains the state
+            // (0x00 = AUTO, 0x01 = ON, 0x02 = OFF)
+            int state = data[data.length - 1] & 0xFF;
+            logger.debug("RMI response state value: {}", state);
+
+            // Route to the sensor callback for bypass state
+            SensorDataCallback callback = sensorCallback;
+            if (callback != null) {
+                // Use the BYPASS_STATE sensor (if defined)
+                Sensors.findByChannelId(ComfoAirBindingConstants.CHANNEL_BYPASS_STATE).ifPresent(sensor -> {
+                    // Create a pseudo-RPDO notification for the sensor callback
+                    Zehnder.CnRpdoNotification message = Zehnder.CnRpdoNotification.newBuilder().setPdid(sensor.id)
+                            .setData(com.google.protobuf.ByteString.copyFrom(new byte[] { (byte) state })).build();
+                    callback.onSensorDataReceived(sensor, message);
+                });
+            }
+        } catch (Exception e) {
+            logger.error("Error handling RMI response: {}", e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Handle connection errors and trigger automatic reconnection if appropriate.
+     *
+     * @param e the IOException that occurred
+     */
+    private void handleConnectionError(final IOException e) {
+        String errorMsg = e.getMessage();
+
+        if (errorMsg != null && (errorMsg.contains("Not connected to gateway") || errorMsg.contains("connection")
+                || errorMsg.contains("socket"))) {
+            logger.warn("Connection error detected: {}. Scheduling automatic reconnection.", errorMsg);
+
+            // Notify the handler to trigger reconnection
+            Runnable reconnectCallback = connectionErrorCallback;
+
+            if (reconnectCallback != null) {
+                reconnectCallback.run();
+            }
+        }
+    }
+
+    /**
      * Convert UUID to bytes.
      *
      * @param uuid the UUID
@@ -707,5 +853,44 @@ public class ComfoConnectProtocolHandler {
         long low = bb.getLong();
 
         return new java.util.UUID(high, low);
+    }
+
+    /**
+     * Discover the ventilation node ID by sending a CnNodeRequest.
+     * This will trigger CnNodeNotification messages from the gateway.
+     */
+    private void discoverVentilationNode() {
+        try {
+            logger.debug("Discovering ventilation node ID");
+            sendRequestSync(Zehnder.CnNodeRequest.newBuilder().build(), byte[].class, REQUEST_TIMEOUT_SEC);
+            // The node ID will be set via handleNodeNotification when the response arrives
+        } catch (Exception e) {
+            logger.warn("Failed to discover ventilation node: {}", e.getMessage());
+            // Fallback to node ID 1 if discovery fails
+            ventilationNodeId = 1;
+        }
+    }
+
+    /**
+     * Get the ventilation node ID, discovering it if not already known.
+     *
+     * @return the ventilation node ID, or 1 if not discovered
+     */
+    public int getVentilationNodeId() {
+        if (ventilationNodeId != null) {
+            return ventilationNodeId;
+        }
+        // Fallback to node ID 1 if not discovered yet
+        return 1;
+    }
+
+    /**
+     * Set the ventilation node ID (called when a CnNodeNotification is received).
+     *
+     * @param nodeId the node ID
+     */
+    public void setVentilationNodeId(int nodeId) {
+        this.ventilationNodeId = nodeId;
+        logger.info("Ventilation node ID discovered: {}", nodeId);
     }
 }

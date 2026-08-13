@@ -54,6 +54,11 @@ public class ComfoAirBindingConstants {
      */
     public static final int COMFOCONNECT_DEFAULT_PORT = 56747;
 
+    // RMI constants for ComfoConnect protocol
+    public static final int RMI_UNIT_SCHEDULE = 0x15;
+    public static final int RMI_SUBUNIT_02 = 0x02;
+    public static final int RMI_PROPERTY_BYPASS_STATE = 0x01;
+
     // Thing properties
     public static final String PROPERTY_SOFTWARE_MAIN_VERSION = "SOFTWARE_VERSION_MAIN";
     public static final String PROPERTY_SOFTWARE_MINOR_VERSION = "SOFTWARE_VERSION_MINOR";

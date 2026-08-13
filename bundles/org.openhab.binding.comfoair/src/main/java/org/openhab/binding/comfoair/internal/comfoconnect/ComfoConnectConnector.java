@@ -92,6 +92,15 @@ public abstract class ComfoConnectConnector {
      */
     public abstract void sendRpdoRequest(int pdid, int type) throws IOException;
 
+    /**
+     * Send an RMI request to the gateway.
+     *
+     * @param nodeId the ComfoNet node ID (typically 1 for ventilation unit)
+     * @param rmiMessage the raw RMI message bytes (e.g., 0x83, UNIT, SUBUNIT, PROPERTY)
+     * @throws IOException if send fails
+     */
+    public abstract void sendRmiRequest(int nodeId, byte[] rmiMessage) throws IOException;
+
     public abstract ProtobufFramer getFramer();
 
     public abstract java.util.UUID getClientUuid();

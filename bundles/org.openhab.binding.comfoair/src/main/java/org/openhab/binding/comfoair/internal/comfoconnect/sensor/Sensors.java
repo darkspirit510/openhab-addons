@@ -25,6 +25,8 @@ import java.util.Optional;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.openhab.core.thing.Channel;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Registry of all known sensors for ComfoConnect LAN (Q-Series) devices.
@@ -35,6 +37,8 @@ import org.openhab.core.thing.Channel;
  */
 @NonNullByDefault
 public class Sensors {
+
+    private static final Logger logger = LoggerFactory.getLogger(Sensors.class);
 
     /**
      * Find the sensor definition for a given channel.
@@ -55,6 +59,16 @@ public class Sensors {
      */
     public static Optional<Sensor> findById(final int sensorId) {
         return knownSensors.stream().filter(s -> s.id == sensorId).findFirst();
+    }
+
+    /**
+     * Find a sensor by its channel ID.
+     *
+     * @param channelId the channel ID to find
+     * @return the sensor, or empty if not found
+     */
+    public static Optional<Sensor> findByChannelId(final String channelId) {
+        return knownSensors.stream().filter(s -> channelId.equals(s.channelId)).findFirst();
     }
 
     public static final List<Sensor> knownSensors = buildSensorList();
@@ -82,7 +96,7 @@ public class Sensors {
         sensors.add(new DecimalSensor("Exhaust Fan Speed (RPM)", 75, TYPE_CN_UINT16, "exhaustFanSpeed"));
         sensors.add(new DecimalSensor("Supply Fan Speed Set", 76, TYPE_CN_UINT8, "supplyFanSpeedSet"));
         sensors.add(new DecimalSensor("Exhaust Fan Speed Set", 77, TYPE_CN_UINT8, "exhaustFanSpeedSet"));
-        sensors.add(new DecimalSensor("Bypass State", 81, TYPE_CN_UINT8, "bypassState"));
+        sensors.add(new BypassStateSensor("Bypass State", 81, TYPE_CN_UINT8, "bypassState"));
         sensors.add(new DecimalSensor("Preheater State", 82, TYPE_CN_UINT8, "preheaterState"));
         sensors.add(new DecimalSensor("Current Humidity", 10, TYPE_CN_UINT8, "currentHumidity"));
         sensors.add(new DecimalSensor("Target Humidity", 11, TYPE_CN_UINT8, "targetHumidity"));

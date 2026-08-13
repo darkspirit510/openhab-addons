@@ -55,6 +55,7 @@ import com.zehnder.proto.Zehnder;
 public class ComfoConnectHandler extends BaseThingHandler {
 
     private static final int CONNECTION_ATTEMPT_DELAY_SEC = 5;
+    private static final int BYPASS_STATE_POLL_INTERVAL_SEC = 30;
 
     private final Logger logger = LoggerFactory.getLogger(ComfoConnectHandler.class);
 
@@ -62,6 +63,7 @@ public class ComfoConnectHandler extends BaseThingHandler {
     private @Nullable ComfoConnectProtocolHandler protocolHandler;
     private @Nullable ScheduledFuture<?> connectionRetryTask;
     private @Nullable Future<?> messageConsumerTask;
+    private @Nullable ScheduledFuture<?> bypassStatePollingTask;
 
     /**
      * Create a new ComfoConnect handler.
@@ -189,6 +191,9 @@ public class ComfoConnectHandler extends BaseThingHandler {
             // Register keep-alive failure callback
             protocolHandler.setKeepAliveFailureCallback(this::handleKeepAliveFailure);
 
+            // Register connection error callback for automatic reconnection
+            protocolHandler.setConnectionErrorCallback(this::handleConnectionError);
+
             // Start the message consumer loop BEFORE protocol initialization
             // so responses can be received and processed
             startMessageConsumer(connector, protocolHandler);
@@ -311,6 +316,9 @@ public class ComfoConnectHandler extends BaseThingHandler {
             connector.disconnect();
         }
 
+        // Stop bypass state polling
+        stopBypassStatePolling();
+
         this.connector = null;
         this.protocolHandler = null;
     }
@@ -425,6 +433,10 @@ public class ComfoConnectHandler extends BaseThingHandler {
                 .ifPresentOrElse(channel -> Sensors.sensorForChannel(channel).ifPresentOrElse(sensor -> {
                     logger.debug("Channel {} linked, subscribing to sensor {}", channelId, sensor);
                     subscribeToSensorForChannel(sensor);
+                    // Start polling for bypass state if this is the bypassState channel
+                    if (ComfoAirBindingConstants.CHANNEL_BYPASS_STATE.equals(channelId)) {
+                        startBypassStatePolling();
+                    }
                 }, () -> logger.warn("Channel {} linked but no sensor mapping found", channelId)),
                         () -> logger.warn("Channel {} linked but channel not found", channelId));
     }
@@ -440,6 +452,11 @@ public class ComfoConnectHandler extends BaseThingHandler {
         // Note: We don't unsubscribe because other channels might use the same sensor,
         // and the gateway doesn't provide an unsubscribe mechanism anyway.
         // Leaving the subscription active is harmless - the data just won't be processed.
+
+        // Stop polling for bypass state if this is the bypassState channel
+        if (ComfoAirBindingConstants.CHANNEL_BYPASS_STATE.equals(channelUID.getId())) {
+            stopBypassStatePolling();
+        }
     }
 
     /**
@@ -455,6 +472,10 @@ public class ComfoConnectHandler extends BaseThingHandler {
                     logger.debug("Channel {} is linked at startup, subscribing to sensor {} ({})",
                             channel.getUID().getId(), sensor.name, sensor.id);
                     subscribeToSensorForChannel(sensor);
+                    // Start polling for bypass state if this is the bypassState channel
+                    if (ComfoAirBindingConstants.CHANNEL_BYPASS_STATE.equals(channel.getUID().getId())) {
+                        startBypassStatePolling();
+                    }
                 });
             }
         }
@@ -494,5 +515,51 @@ public class ComfoConnectHandler extends BaseThingHandler {
         }
 
         scheduler.schedule(this::connect, 5, TimeUnit.SECONDS);
+    }
+
+    /**
+     * Handle connection errors by marking bridge offline and scheduling a fresh reconnection.
+     */
+    private void handleConnectionError() {
+        logger.warn("Connection error detected, attempting fresh connection");
+        updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
+                "Gateway connection lost: Communication error");
+
+        scheduler.schedule(this::connect, 5, TimeUnit.SECONDS);
+    }
+
+    /**
+     * Start polling for bypass state via RMI requests.
+     */
+    private void startBypassStatePolling() {
+        if (bypassStatePollingTask != null) {
+            return; // Already running
+        }
+
+        logger.debug("Starting bypass state polling every {} seconds", BYPASS_STATE_POLL_INTERVAL_SEC);
+        bypassStatePollingTask = scheduler.scheduleAtFixedRate(() -> {
+            try {
+                ComfoConnectProtocolHandler handler = protocolHandler;
+                if (handler != null && isConnected()) {
+                    handler.sendRmiRequest(ComfoAirBindingConstants.RMI_UNIT_SCHEDULE,
+                            ComfoAirBindingConstants.RMI_SUBUNIT_02,
+                            ComfoAirBindingConstants.RMI_PROPERTY_BYPASS_STATE);
+                }
+            } catch (Exception e) {
+                logger.warn("Error polling bypass state: {}", e.getMessage());
+            }
+        }, 0, BYPASS_STATE_POLL_INTERVAL_SEC, TimeUnit.SECONDS);
+    }
+
+    /**
+     * Stop polling for bypass state.
+     */
+    private void stopBypassStatePolling() {
+        ScheduledFuture<?> task = bypassStatePollingTask;
+        if (task != null) {
+            task.cancel(true);
+            bypassStatePollingTask = null;
+            logger.debug("Stopped bypass state polling");
+        }
     }
 }
