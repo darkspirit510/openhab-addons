@@ -34,8 +34,9 @@ class BooleanSensorTest {
     @DisplayName("Return ON state when boolean value is non-zero")
     void testValueAsStateWithNonZeroValue() {
         BooleanSensor sensor = new BooleanSensor("Test Sensor", 1, SensorValueType.TYPE_CN_BOOL, "test-channel");
+        // Data bytes: value 1 at byte 0
         Zehnder.CnRpdoNotification message = Zehnder.CnRpdoNotification.newBuilder().setPdid(1)
-                .setData(com.google.protobuf.ByteString.copyFrom(new byte[] { 0x00, 0x00, 0x01, 0x00, 0x01 })).build();
+                .setData(com.google.protobuf.ByteString.copyFrom(new byte[] { 0x01 })).build();
 
         State state = sensor.valueAsState(message);
         assertNotNull(state);
@@ -46,8 +47,9 @@ class BooleanSensorTest {
     @DisplayName("Return OFF state when boolean value is zero")
     void testValueAsStateWithZeroValue() {
         BooleanSensor sensor = new BooleanSensor("Test Sensor", 2, SensorValueType.TYPE_CN_BOOL, "test-channel");
+        // Data bytes: value 0 at byte 0
         Zehnder.CnRpdoNotification message = Zehnder.CnRpdoNotification.newBuilder().setPdid(2)
-                .setData(com.google.protobuf.ByteString.copyFrom(new byte[] { 0x00, 0x00, 0x02, 0x00, 0x00 })).build();
+                .setData(com.google.protobuf.ByteString.copyFrom(new byte[] { 0x00 })).build();
 
         State state = sensor.valueAsState(message);
         assertNotNull(state);
@@ -58,8 +60,9 @@ class BooleanSensorTest {
     @DisplayName("Return null when payload is too short")
     void testValueAsStateWithShortPayload() {
         BooleanSensor sensor = new BooleanSensor("Test Sensor", 3, SensorValueType.TYPE_CN_BOOL, "test-channel");
+        // Empty payload should return null
         Zehnder.CnRpdoNotification message = Zehnder.CnRpdoNotification.newBuilder().setPdid(3)
-                .setData(com.google.protobuf.ByteString.copyFrom(new byte[] { 0x00, 0x00, 0x03, 0x01 })).build();
+                .setData(com.google.protobuf.ByteString.copyFrom(new byte[] {})).build();
 
         State state = sensor.valueAsState(message);
         assertNull(state);
@@ -69,8 +72,9 @@ class BooleanSensorTest {
     @DisplayName("Return ON state when boolean value is 1")
     void testValueAsStateWithValueOne() {
         BooleanSensor sensor = new BooleanSensor("Test Sensor", 4, SensorValueType.TYPE_CN_BOOL, "test-channel");
+        // Data bytes: value 1 at byte 0
         Zehnder.CnRpdoNotification message = Zehnder.CnRpdoNotification.newBuilder().setPdid(4)
-                .setData(com.google.protobuf.ByteString.copyFrom(new byte[] { 0x00, 0x00, 0x04, 0x00, 0x01 })).build();
+                .setData(com.google.protobuf.ByteString.copyFrom(new byte[] { 0x01 })).build();
 
         State state = sensor.valueAsState(message);
         assertNotNull(state);
@@ -81,9 +85,9 @@ class BooleanSensorTest {
     @DisplayName("Return ON state when boolean value is 255 (max byte value)")
     void testValueAsStateWithMaxByteValue() {
         BooleanSensor sensor = new BooleanSensor("Test Sensor", 5, SensorValueType.TYPE_CN_BOOL, "test-channel");
+        // Data bytes: value 255 at byte 0
         Zehnder.CnRpdoNotification message = Zehnder.CnRpdoNotification.newBuilder().setPdid(5)
-                .setData(com.google.protobuf.ByteString.copyFrom(new byte[] { 0x00, 0x00, 0x05, 0x00, (byte) 0xFF }))
-                .build();
+                .setData(com.google.protobuf.ByteString.copyFrom(new byte[] { (byte) 0xFF })).build();
 
         State state = sensor.valueAsState(message);
         assertNotNull(state);
@@ -94,8 +98,9 @@ class BooleanSensorTest {
     @DisplayName("Return OFF state when boolean value is 0")
     void testValueAsStateWithValueZero() {
         BooleanSensor sensor = new BooleanSensor("Test Sensor", 6, SensorValueType.TYPE_CN_BOOL, "test-channel");
+        // Data bytes: value 0 at byte 0
         Zehnder.CnRpdoNotification message = Zehnder.CnRpdoNotification.newBuilder().setPdid(6)
-                .setData(com.google.protobuf.ByteString.copyFrom(new byte[] { 0x00, 0x00, 0x06, 0x00, 0x00 })).build();
+                .setData(com.google.protobuf.ByteString.copyFrom(new byte[] { 0x00 })).build();
 
         State state = sensor.valueAsState(message);
         assertNotNull(state);
@@ -103,11 +108,12 @@ class BooleanSensorTest {
     }
 
     @Test
-    @DisplayName("Return null when payload has exactly 4 bytes (minimum required is 5)")
+    @DisplayName("Return null when payload is empty")
     void testValueAsStateWithExactly4Bytes() {
         BooleanSensor sensor = new BooleanSensor("Test Sensor", 7, SensorValueType.TYPE_CN_BOOL, "test-channel");
+        // Empty payload should return null
         Zehnder.CnRpdoNotification message = Zehnder.CnRpdoNotification.newBuilder().setPdid(7)
-                .setData(com.google.protobuf.ByteString.copyFrom(new byte[] { 0x00, 0x00, 0x07, 0x00 })).build();
+                .setData(com.google.protobuf.ByteString.copyFrom(new byte[] {})).build();
 
         State state = sensor.valueAsState(message);
         assertNull(state);
@@ -131,13 +137,13 @@ class BooleanSensorTest {
 
         // Test with value 1
         Zehnder.CnRpdoNotification message1 = Zehnder.CnRpdoNotification.newBuilder().setPdid(9)
-                .setData(com.google.protobuf.ByteString.copyFrom(new byte[] { 0x00, 0x00, 0x09, 0x00, 0x01 })).build();
+                .setData(com.google.protobuf.ByteString.copyFrom(new byte[] { 0x01 })).build();
         State state1 = sensor.valueAsState(message1);
         assertEquals(OnOffType.ON, state1);
 
         // Test with value 10
         Zehnder.CnRpdoNotification message2 = Zehnder.CnRpdoNotification.newBuilder().setPdid(10)
-                .setData(com.google.protobuf.ByteString.copyFrom(new byte[] { 0x00, 0x00, 0x0A, 0x00, 0x0A })).build();
+                .setData(com.google.protobuf.ByteString.copyFrom(new byte[] { 0x0A })).build();
         State state2 = sensor.valueAsState(message2);
         assertEquals(OnOffType.ON, state2);
     }

@@ -700,6 +700,7 @@ public class ComfoConnectProtocolHandler {
             throws IOException {
         // Construct RMI message payload: 0x83 (read request), unit, subunit, propertyId
         byte[] rmiMessage = new byte[] { (byte) 0x83, (byte) unit, (byte) subunit, (byte) propertyId };
+
         try {
             connector.sendRmiRequest(nodeId, rmiMessage);
         } catch (IOException e) {
@@ -739,17 +740,21 @@ public class ComfoConnectProtocolHandler {
      */
     private void handleRpdoNotification(final Payload payload) {
         try {
-            logger.debug("handleRpdoNotification: payload length={}", payload.length);
+            logger.debug("handleRpdoNotification: payload length={}, hex={}", payload.length,
+                    bytesToHex(payload.content));
 
-            if (payload.length < 4) {
-                logger.warn("Invalid RPDO notification: payload too short (length={})", payload.length);
-                return;
-            }
+            // Parse the payload as a protobuf CnRpdoNotification message
+            Zehnder.CnRpdoNotification notification = Zehnder.CnRpdoNotification.parseFrom(payload.content);
 
-            Sensor sensor = Sensors.findById(payload.sensorId()).orElse(null);
+            int sensorId = notification.getPdid();
+            byte[] dataBytes = notification.getData().toByteArray();
+            logger.debug("Parsed RPDO: pdid={}, data length={}, data hex={}", sensorId, dataBytes.length,
+                    bytesToHex(dataBytes));
+
+            Sensor sensor = Sensors.findById(sensorId).orElse(null);
 
             if (sensor == null) {
-                logger.warn("Received notification for unknown sensor with ID {}, ignoring it", payload.sensorId());
+                logger.warn("Received notification for unknown sensor with ID {}, ignoring it", sensorId);
                 return;
             }
 
@@ -759,14 +764,28 @@ public class ComfoConnectProtocolHandler {
             SensorDataCallback callback = sensorCallback;
 
             if (callback != null) {
-                // Create protobuf message with sensor ID as pdid and payload as data
-                Zehnder.CnRpdoNotification message = Zehnder.CnRpdoNotification.newBuilder().setPdid(sensor.id)
-                        .setData(com.google.protobuf.ByteString.copyFrom(payload.content)).build();
-                callback.onSensorDataReceived(sensor, message);
+                callback.onSensorDataReceived(sensor, notification);
             }
         } catch (Exception e) {
             logger.error("Error handling RPDO notification: {}", e.getMessage(), e);
         }
+    }
+
+    /**
+     * Convert byte array to hex string for debugging.
+     *
+     * @param bytes the byte array to convert
+     * @return hex string representation
+     */
+    private static String bytesToHex(byte[] bytes) {
+        StringBuilder hexString = new StringBuilder();
+
+        for (byte b : bytes) {
+            String hex = String.format("%02X", b);
+            hexString.append(hex).append(" ");
+        }
+
+        return hexString.toString().trim();
     }
 
     /**
@@ -794,6 +813,7 @@ public class ComfoConnectProtocolHandler {
 
             // Route to the sensor callback for bypass state
             SensorDataCallback callback = sensorCallback;
+
             if (callback != null) {
                 // Use the BYPASS_STATE sensor (if defined)
                 Sensors.findByChannelId(ComfoAirBindingConstants.CHANNEL_BYPASS_STATE).ifPresent(sensor -> {
@@ -809,20 +829,38 @@ public class ComfoConnectProtocolHandler {
     }
 
     /**
+     * Check if an error message indicates a connection error that should trigger reconnection.
+     *
+     * @param errorMsg the error message to check
+     * @return true if the error is connection-related, false otherwise
+     */
+    public boolean isConnectionError(final String errorMsg) {
+        return errorMsg != null && (errorMsg.contains("Not connected to gateway") || errorMsg.contains("connection")
+                || errorMsg.contains("socket"));
+    }
+
+    /**
+     * Get the connection error callback.
+     *
+     * @return the connection error callback, or null if not set
+     */
+    @Nullable
+    Runnable getConnectionErrorCallback() {
+        return connectionErrorCallback;
+    }
+
+    /**
      * Handle connection errors and trigger automatic reconnection if appropriate.
      *
      * @param e the IOException that occurred
      */
     private void handleConnectionError(final IOException e) {
         String errorMsg = e.getMessage();
-
-        if (errorMsg != null && (errorMsg.contains("Not connected to gateway") || errorMsg.contains("connection")
-                || errorMsg.contains("socket"))) {
+        if (errorMsg != null && isConnectionError(errorMsg)) {
             logger.warn("Connection error detected: {}. Scheduling automatic reconnection.", errorMsg);
 
             // Notify the handler to trigger reconnection
             Runnable reconnectCallback = connectionErrorCallback;
-
             if (reconnectCallback != null) {
                 reconnectCallback.run();
             }
@@ -880,6 +918,7 @@ public class ComfoConnectProtocolHandler {
         if (ventilationNodeId != null) {
             return ventilationNodeId;
         }
+
         // Fallback to node ID 1 if not discovered yet
         return 1;
     }

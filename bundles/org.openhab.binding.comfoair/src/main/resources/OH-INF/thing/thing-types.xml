@@ -2122,44 +2122,44 @@
 		</channel-type> -->
 
 	<channel-type id="indoorHumidity">
-		<item-type>Number:Dimensionless</item-type>
+		<item-type>Number</item-type>
 		<label>Indoor Humidity</label>
 		<description>Indoor humidity level</description>
 		<category>Humidity</category>
-		<state readOnly="true" pattern="%d %%"/>
+		<state readOnly="true" pattern="%.1f %%"/>
 	</channel-type>
 
 	<!-- Humidity sensors (no correction) -->
 	<channel-type id="exhaustHumidity">
-		<item-type>Number:Dimensionless</item-type>
+		<item-type>Number</item-type>
 		<label>Exhaust Humidity</label>
 		<description>Exhaust air humidity level</description>
 		<category>Humidity</category>
-		<state readOnly="true" pattern="%d %%"/>
+		<state readOnly="true" pattern="%.1f %%"/>
 	</channel-type>
 
 	<channel-type id="indoorHumidity2">
-		<item-type>Number:Dimensionless</item-type>
+		<item-type>Number</item-type>
 		<label>Indoor Humidity 2</label>
 		<description>Indoor humidity level (alternative sensor)</description>
 		<category>Humidity</category>
-		<state readOnly="true" pattern="%d %%"/>
+		<state readOnly="true" pattern="%.1f %%"/>
 	</channel-type>
 
 	<channel-type id="exhaustHumidity2">
-		<item-type>Number:Dimensionless</item-type>
+		<item-type>Number</item-type>
 		<label>Exhaust Humidity 2</label>
 		<description>Exhaust air humidity level (alternative sensor)</description>
 		<category>Humidity</category>
-		<state readOnly="true" pattern="%d %%"/>
+		<state readOnly="true" pattern="%.1f %%"/>
 	</channel-type>
 
 	<channel-type id="indoorHumidity3">
-		<item-type>Number:Dimensionless</item-type>
+		<item-type>Number</item-type>
 		<label>Indoor Humidity 3</label>
 		<description>Indoor humidity level (third sensor)</description>
 		<category>Humidity</category>
-		<state readOnly="true" pattern="%d %%"/>
+		<state readOnly="true" pattern="%.1f %%"/>
 	</channel-type>
 
 	<!-- COMMENTED OUT - User doesn't own comfosupply sensor -->
@@ -2683,43 +2683,43 @@
 
 	<!-- Phase 10: Humidity sensors -->
 	<channel-type id="extractAirHumidity">
-		<item-type>Number:Dimensionless</item-type>
+		<item-type>Number</item-type>
 		<label>Extract Air Humidity</label>
 		<description>Extract air humidity level</description>
 		<category>Humidity</category>
-		<state readOnly="true" pattern="%d %%"/>
+		<state readOnly="true" pattern="%.1f %%"/>
 	</channel-type>
 
 	<channel-type id="exhaustAirHumidity">
-		<item-type>Number:Dimensionless</item-type>
+		<item-type>Number</item-type>
 		<label>Exhaust Air Humidity</label>
 		<description>Exhaust air humidity level</description>
 		<category>Humidity</category>
-		<state readOnly="true" pattern="%d %%"/>
+		<state readOnly="true" pattern="%.1f %%"/>
 	</channel-type>
 
 	<channel-type id="outdoorAirHumidity">
-		<item-type>Number:Dimensionless</item-type>
+		<item-type>Number</item-type>
 		<label>Outdoor Air Humidity</label>
 		<description>Outdoor air humidity level</description>
 		<category>Humidity</category>
-		<state readOnly="true" pattern="%d %%"/>
+		<state readOnly="true" pattern="%.1f %%"/>
 	</channel-type>
 
 	<channel-type id="humidityAfterPreheater" advanced="true">
-		<item-type>Number:Dimensionless</item-type>
+		<item-type>Number</item-type>
 		<label>Humidity After Preheater</label>
 		<description>Outdoor air humidity after preheater</description>
 		<category>Humidity</category>
-		<state readOnly="true" pattern="%d %%"/>
+		<state readOnly="true" pattern="%.1f %%"/>
 	</channel-type>
 
 	<channel-type id="supplyAirHumidity">
-		<item-type>Number:Dimensionless</item-type>
+		<item-type>Number</item-type>
 		<label>Supply Air Humidity</label>
 		<description>Supply air humidity level</description>
 		<category>Humidity</category>
-		<state readOnly="true" pattern="%d %%"/>
+		<state readOnly="true" pattern="%.1f %%"/>
 	</channel-type>
 
 	<!-- Phase 11: Boolean sensors -->

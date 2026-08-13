@@ -39,8 +39,9 @@ public class SensorTest {
     public void testExtractValueFromPayloadUint8() {
         Sensor sensor = new DecimalSensor("sensor", 42, SensorValueType.TYPE_CN_UINT8, "channel");
 
-        // Payload structure: [fieldTag, sensorId, fieldTag, value]
-        byte[] payload = new byte[] { 0x08, 0x2A, 0x12, 0x1E }; // sensor ID 42, value 30 (0x1E)
+        // Payload is the data bytes from CnRpdoNotification.getData().toByteArray()
+        // For UINT8: value is at byte 0
+        byte[] payload = new byte[] { 0x1E }; // value 30 (0x1E)
 
         int result = sensor.parseValueFrom(payload);
         assertEquals(30, result);
@@ -51,11 +52,10 @@ public class SensorTest {
     public void testExtractValueFromPayloadUint16() {
         Sensor sensor = new DecimalSensor("sensor", 120, SensorValueType.TYPE_CN_UINT16, "channel");
 
-        // Payload structure: [fieldTag, sensorIdLow, sensorIdHigh, fieldTag, length, valueLSB, valueMSB]
-        // For value 148 (0x0094 in big-endian, 0x9400 in little-endian)
-        // Little-endian: LSB=0x94, MSB=0x00
-        // Sensor ID 120 (0x0078): low=0x78, high=0x00
-        byte[] payload = new byte[] { 0x08, 0x78, 0x00, 0x12, 0x02, (byte) 0x94, 0x00 };
+        // Payload is the data bytes from CnRpdoNotification.getData().toByteArray()
+        // For UINT16: value is at bytes 0-1 (little-endian)
+        // Value 148 = 0x0094 in big-endian = 0x9400 in little-endian
+        byte[] payload = new byte[] { (byte) 0x94, 0x00 };
 
         int result = sensor.parseValueFrom(payload);
         assertEquals(148, result);
@@ -66,10 +66,10 @@ public class SensorTest {
     public void testExtractValueFromPayloadInt16() {
         Sensor sensor = new DecimalSensor("sensor", 42, SensorValueType.TYPE_CN_INT16, "channel");
 
-        // For INT16, same extraction as UINT16 but interpreted as signed
-        // Value -100 in little-endian: LSB=0x9C, MSB=0xFF (0xFF9C = -100 in two's complement)
-        // Sensor ID 42 (0x002A): low=0x2A, high=0x00
-        byte[] payload = new byte[] { 0x08, 0x2A, 0x00, 0x12, 0x02, (byte) 0x9C, (byte) 0xFF };
+        // Payload is the data bytes from CnRpdoNotification.getData().toByteArray()
+        // For INT16: value is at bytes 0-1 (little-endian, signed)
+        // Value -100 = 0xFF9C in two's complement (LSB=0x9C, MSB=0xFF)
+        byte[] payload = new byte[] { (byte) 0x9C, (byte) 0xFF };
 
         int result = sensor.parseValueFrom(payload);
         // With proper INT16 support (sign-extension), -100 should be returned
@@ -81,7 +81,7 @@ public class SensorTest {
     public void testExtractValueFromPayloadTooShort() {
         Sensor sensor = new DecimalSensor("sensor", 42, SensorValueType.TYPE_CN_UINT8, "channel");
 
-        byte[] shortPayload = new byte[] { 0x08, 0x2A }; // Only 2 bytes
+        byte[] shortPayload = new byte[] {}; // Empty payload
 
         int result = sensor.parseValueFrom(shortPayload);
         assertEquals(0, result);
@@ -92,8 +92,8 @@ public class SensorTest {
     public void testExtractValueFromPayloadUint16TooShort() {
         Sensor sensor = new DecimalSensor("sensor", 42, SensorValueType.TYPE_CN_UINT16, "channel");
 
-        // Payload has only 3 bytes, less than minimum 4
-        byte[] payload = new byte[] { 0x08, 0x2A, 0x12 };
+        // Payload has only 1 byte, less than minimum 2 - should return 0
+        byte[] payload = new byte[] {};
 
         int result = sensor.parseValueFrom(payload);
         assertEquals(0, result);
@@ -105,7 +105,9 @@ public class SensorTest {
         // Create a sensor with a type that's not explicitly handled
         Sensor sensor = new DecimalSensor("sensor", 42, SensorValueType.TYPE_CN_INT8, "channel");
 
-        byte[] payload = new byte[] { 0x08, 0x2A, 0x12, 0x1E }; // value 30 at byte 3
+        // Payload is the data bytes from CnRpdoNotification.getData().toByteArray()
+        // Default case treats as UINT8 at byte 0
+        byte[] payload = new byte[] { 0x1E }; // value 30 at byte 0
 
         int result = sensor.parseValueFrom(payload);
         assertEquals(30, result);

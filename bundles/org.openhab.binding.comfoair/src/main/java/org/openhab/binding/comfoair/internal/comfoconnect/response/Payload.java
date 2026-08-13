@@ -42,14 +42,4 @@ public class Payload {
     public int length() {
         return length;
     }
-
-    /**
-     * Extract sensor ID from payload content.
-     * Sensor ID is calculated as: (content[2] & 0xFF) << 8 | (content[1] & 0xFF)
-     *
-     * @return the extracted sensor ID
-     */
-    public int sensorId() {
-        return (content[2] & 0xFF) << 8 | (content[1] & 0xFF);
-    }
 }

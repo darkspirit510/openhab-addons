@@ -19,6 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.stream.Stream;
 
+import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -30,6 +31,7 @@ import org.openhab.core.library.types.DecimalType;
 import org.openhab.core.library.types.OnOffType;
 import org.openhab.core.types.State;
 
+import com.zehnder.proto.Zehnder.CnRpdoNotification;
 import com.zehnder.proto.Zehnder.GatewayOperation;
 
 /**
@@ -52,25 +54,35 @@ public class ComfoConnectHandlerTest {
 
     static Stream<Arguments> sensorPayloadsAndStates() {
         return Stream.of(
-                // Sensor 119: Exhaust Fan Flow (0x0077)
-                // Arguments.of(new byte[] { 0x08, 0x77, 0x00, 0x12, 0x02, (byte) 0x8E, 0x00 }, 119, new
-                // DecimalType(142)),
-                // Sensor 210: Season Heating Active (0x00D2)
-                Arguments.of(new byte[] { 0x08, (byte) 0xD2, 0x00, 0x12, 0x01 }, 210, OnOffType.ON),
-                // Sensor 211: Season Cooling Active (0x00D3)
-                Arguments.of(new byte[] { 0x08, (byte) 0xD3, 0x00, 0x12, 0x00 }, 211, OnOffType.OFF),
-                // Sensor 221: Supply Air Temperature (0x00DD)
-                Arguments.of(new byte[] { 0x08, (byte) 0xDD, 0x00, 0x12, 0x02, (byte) 0xCE, (byte) 0xFF }, 221,
-                        new DecimalType(-5.0)),
-                // Sensor 274: Extract Air Temperature (0x0112)
-                Arguments.of(new byte[] { 0x08, (byte) 0x12, 0x01, 0x12, 0x02, (byte) 0xE7, (byte) 0xFF }, 274,
-                        new DecimalType(-2.5)),
-                // Sensor 275: Exhaust Air Temperature (0x0113)
-                Arguments.of(new byte[] { 0x08, (byte) 0x13, 0x01, 0x12, 0x02, 0x7D, 0x00 }, 275,
-                        new DecimalType(12.5)),
-                // Sensor 276: Outdoor Air Temperature (0x0114)
-                Arguments.of(new byte[] { 0x08, (byte) 0x14, 0x01, 0x12, 0x02, (byte) 0xFA, 0x00 }, 276,
-                        new DecimalType(25.0)));
+                // Sensor 210: Season Heating Active (0x00D2) - BOOL type, value ON (0x01)
+                argumentsOf(210, new byte[] { 0x01 }, OnOffType.ON),
+                // Sensor 211: Season Cooling Active (0x00D3) - BOOL type, value OFF (0x00)
+                argumentsOf(211, new byte[] { 0x00 }, OnOffType.OFF),
+                // Sensor 221: Supply Air Temperature (0x00DD) - INT16, value -50 (0xFFCE in little-endian)
+                argumentsOf(221, new byte[] { (byte) 0xCE, (byte) 0xFF }, new DecimalType(-5.0)),
+                // Sensor 274: Extract Air Temperature (0x0112) - INT16, value -25 (0xFFE7 in little-endian)
+                argumentsOf(274, new byte[] { (byte) 0xE7, (byte) 0xFF }, new DecimalType(-2.5)),
+                // Sensor 275: Exhaust Air Temperature (0x0113) - INT16, value 125 (0x007D in little-endian)
+                argumentsOf(275, new byte[] { 0x7D, 0x00 }, new DecimalType(12.5)),
+                // Sensor 276: Outdoor Air Temperature (0x0114) - INT16, value 250 (0x00FA in little-endian)
+                argumentsOf(276, new byte[] { (byte) 0xFA, 0x00 }, new DecimalType(25.0)),
+                // Sensor 290: Extract Air Humidity (0x0122) - UINT8, value 45%
+                argumentsOf(290, new byte[] { 45 }, new DecimalType(45)),
+                // Sensor 291: Exhaust Air Humidity (0x0123) - UINT8, value 60%
+                argumentsOf(291, new byte[] { 60 }, new DecimalType(60)),
+                // Sensor 292: Outdoor Air Humidity (0x0124) - UINT8, value 75%
+                argumentsOf(292, new byte[] { 75 }, new DecimalType(75)),
+                // Sensor 294: Supply Air Humidity (0x0126) - UINT8, value 50%
+                argumentsOf(294, new byte[] { 50 }, new DecimalType(50)));
+    }
+
+    private static @NonNull Arguments argumentsOf(int sensorId, byte[] payload, State state) {
+        return Arguments.of(createRpdoNotification(sensorId, payload), sensorId, state);
+    }
+
+    private static byte[] createRpdoNotification(int sensorId, byte[] data) {
+        return CnRpdoNotification.newBuilder().setPdid(sensorId).setData(com.google.protobuf.ByteString.copyFrom(data))
+                .build().toByteArray();
     }
 
     @ParameterizedTest
@@ -98,7 +110,8 @@ public class ComfoConnectHandlerTest {
     @Test
     @DisplayName("Ignores unknown sensor updates")
     public void testIgnoresUnknownSensorUpdate() {
-        byte[] rpdoPayload = new byte[] { 0x08, (byte) 0xE7, 0x03, 0x12, 0x3C };
+        // Create a notification for unknown sensor ID 0x03E7 (1000)
+        byte[] rpdoPayload = createRpdoNotification(1000, new byte[] { 0x3C });
 
         GatewayOperation operation = GatewayOperation.newBuilder()
                 .setType(GatewayOperation.OperationType.CnRpdoNotificationType).setReference(1)

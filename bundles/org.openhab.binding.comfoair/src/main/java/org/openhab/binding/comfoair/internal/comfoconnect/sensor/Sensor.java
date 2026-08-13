@@ -79,27 +79,27 @@ public abstract class Sensor {
      * @return the extracted sensor value
      */
     public int parseValueFrom(byte[] payload) {
-        if (payload.length < 4) {
+        if (payload.length < 1) {
             return 0;
         }
 
         switch (type) {
-            // For UINT8 sensors: byte 3 contains the value
+            // For UINT8 sensors: byte 0 contains the value
             case TYPE_CN_UINT8 -> {
-                return payload[3] & 0xFF;
+                return payload[0] & 0xFF;
             }
 
-            // For UINT16 sensors: byte 4 is length, bytes 5-6 are value (little-endian)
+            // For UINT16 sensors: bytes 0-1 are value (little-endian)
             case TYPE_CN_UINT16 -> {
-                if (payload.length >= 7) {
-                    return ((payload[6] & 0xFF) << 8) | (payload[5] & 0xFF);
+                if (payload.length >= 2) {
+                    return ((payload[1] & 0xFF) << 8) | (payload[0] & 0xFF);
                 }
             }
 
-            // For INT16 sensors: byte 4 is length, bytes 5-6 are value (little-endian, signed)
+            // For INT16 sensors: bytes 0-1 are value (little-endian, signed)
             case TYPE_CN_INT16 -> {
-                if (payload.length >= 7) {
-                    int value = ((payload[6] & 0xFF) << 8) | (payload[5] & 0xFF);
+                if (payload.length >= 2) {
+                    int value = ((payload[1] & 0xFF) << 8) | (payload[0] & 0xFF);
                     if ((value & 0x8000) != 0) {
                         value -= 0x10000;
                     }
@@ -108,7 +108,7 @@ public abstract class Sensor {
             }
         }
 
-        // Default to UINT8 at byte 3 for unknown types
-        return payload[3] & 0xFF;
+        // Default to UINT8 at byte 0 for unknown types
+        return payload[0] & 0xFF;
     }
 }
