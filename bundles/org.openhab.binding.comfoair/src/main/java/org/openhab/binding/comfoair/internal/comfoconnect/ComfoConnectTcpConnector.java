@@ -181,6 +181,37 @@ public class ComfoConnectTcpConnector extends ComfoConnectConnector {
     }
 
     @Override
+    public void sendRpdoUnsubscribe(final int pdid) throws IOException {
+        logger.debug("sendRpdoUnsubscribe called: pdid={}", pdid);
+
+        try {
+            // To unsubscribe, send a CnRpdoRequest without the type field
+            // According to the protocol: "when no type is specified, a previously registered RPDO with given PDID is
+            // deleted"
+            Zehnder.CnRpdoRequest.Builder rpdoBuilder = Zehnder.CnRpdoRequest.newBuilder();
+            rpdoBuilder.setPdid(pdid);
+            rpdoBuilder.setZone(1); // Zone must be set to 1, matching aiocomfoconnect
+            // Note: We do NOT set the type field - this is what triggers the unsubscribe
+            logger.debug("Built CnRpdoRequest for unsubscribe: pdid={}, zone={}", pdid, 1);
+
+            byte[] frame = getFramer().createFrame(
+                    Zehnder.GatewayOperation.newBuilder()
+                            .setType(Zehnder.GatewayOperation.OperationType.CnRpdoRequestType).build(),
+                    rpdoBuilder.build());
+
+            logger.debug("Created RPDO unsubscribe frame, length={} bytes", frame.length);
+            sendMessage(frame);
+            Sensors.findById(pdid).ifPresentOrElse(sensor -> logger.info("RPDO unsubscribe sent for sensor {}", sensor),
+                    () -> logger.info("RPDO unsubscribe sent for sensor ??? ({})", pdid));
+        } catch (IOException e) {
+            logger.error("Failed to send RPDO unsubscribe: {}", e.getMessage());
+            isConnected = false;
+            cleanup();
+            throw e;
+        }
+    }
+
+    @Override
     public void sendRmiRequest(final int nodeId, final byte[] rmiMessage) throws IOException {
         logger.debug("sendRmiRequest called: nodeId={}, rmiMessage length={}", nodeId, rmiMessage.length);
 

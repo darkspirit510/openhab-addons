@@ -84,13 +84,23 @@ public abstract class ComfoConnectConnector {
     public abstract void sendMessage(byte[] message) throws IOException;
 
     /**
-     * Send an RPDO subscription request for a sensor.
+     * Send an RPDO request to subscribe to a sensor.
      *
-     * @param pdid the PDO sensor ID
+     * @param pdid the PDO ID of the sensor
      * @param type the sensor data type
      * @throws IOException if send fails
      */
     public abstract void sendRpdoRequest(int pdid, int type) throws IOException;
+
+    /**
+     * Send an RPDO request to unsubscribe from a sensor.
+     * According to the protocol, sending a CnRpdoRequest without the type field
+     * will delete a previously registered RPDO with the given PDID.
+     *
+     * @param pdid the PDO ID of the sensor to unsubscribe from
+     * @throws IOException if send fails
+     */
+    public abstract void sendRpdoUnsubscribe(int pdid) throws IOException;
 
     /**
      * Send an RMI request to the gateway.

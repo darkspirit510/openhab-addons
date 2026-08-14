@@ -676,6 +676,25 @@ public class ComfoConnectProtocolHandler {
     }
 
     /**
+     * Unsubscribe from a sensor.
+     * This sends a CnRpdoRequest without the type field, which according to the protocol
+     * will delete a previously registered RPDO with the given PDID.
+     *
+     * @param sensor the sensor to unsubscribe from
+     */
+    public void unsubscribeFromSensor(final Sensor sensor) {
+        try {
+            logger.info("Unsubscribing from sensor {} (PDO {})", sensor, sensor.id);
+            connector.sendRpdoUnsubscribe(sensor.id);
+            logger.info("Sensor {} unsubscribe request sent successfully", sensor);
+        } catch (IOException e) {
+            logger.warn("Failed to unsubscribe from sensor {}: {}", sensor, e.getMessage());
+            // Check if this is a connection-related error and trigger reconnection
+            handleConnectionError(e);
+        }
+    }
+
+    /**
      * Send an RMI request to the gateway using the discovered ventilation node ID.
      *
      * @param unit the RMI unit ID (e.g., UNIT_SCHEDULE = 0x08)

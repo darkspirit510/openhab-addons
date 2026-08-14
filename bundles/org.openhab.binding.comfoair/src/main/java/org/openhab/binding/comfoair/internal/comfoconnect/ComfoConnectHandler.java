@@ -17,7 +17,9 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.SocketTimeoutException;
+import java.util.HashSet;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledFuture;
@@ -64,6 +66,12 @@ public class ComfoConnectHandler extends BaseThingHandler {
     private @Nullable ScheduledFuture<?> connectionRetryTask;
     private @Nullable Future<?> messageConsumerTask;
     private @Nullable ScheduledFuture<?> bypassStatePollingTask;
+
+    // Track which sensors have at least one linked channel
+    private final Set<Integer> subscribedSensors = new HashSet<>();
+
+    // Track if we have any linked channels at all
+    private int linkedChannelCount = 0;
 
     /**
      * Create a new ComfoConnect handler.
@@ -319,6 +327,10 @@ public class ComfoConnectHandler extends BaseThingHandler {
         // Stop bypass state polling
         stopBypassStatePolling();
 
+        // Clear subscribed sensors and channel count
+        subscribedSensors.clear();
+        linkedChannelCount = 0;
+
         this.connector = null;
         this.protocolHandler = null;
     }
@@ -330,7 +342,13 @@ public class ComfoConnectHandler extends BaseThingHandler {
      * @param message the protobuf message containing sensor data
      */
     private void handleSensorData(final Sensor sensor, final Zehnder.CnRpdoNotification message) {
-        logger.info("handleSensorData called: sensor={}", sensor);
+        // Only process sensor data if this sensor has at least one linked channel
+        if (!subscribedSensors.contains(sensor.id)) {
+            logger.debug("Ignoring sensor data for unsubscribed sensor: {}", sensor);
+            return;
+        }
+
+        logger.debug("handleSensorData called: sensor={}", sensor);
 
         State state = sensor.valueAsState(message);
 
@@ -338,7 +356,7 @@ public class ComfoConnectHandler extends BaseThingHandler {
             // Update the channel state using the sensor's channel ID
             updateChannelState(sensor.channelId, state);
         } else {
-            logger.info("Ignoring data for unknown sensor: {}", sensor);
+            logger.debug("Ignoring data for unknown sensor: {}", sensor);
         }
     }
 
@@ -420,6 +438,32 @@ public class ComfoConnectHandler extends BaseThingHandler {
     }
 
     /**
+     * Resubscribe to all sensors that have linked channels.
+     * This is used when we need to re-establish RPDO subscriptions after they've been unsubscribed.
+     */
+    private void resubscribeToAllLinkedSensors() {
+        ComfoConnectProtocolHandler handler = protocolHandler;
+        if (handler == null) {
+            logger.warn("Cannot resubscribe to sensors: protocol handler not initialized");
+            return;
+        }
+
+        logger.debug("Resubscribing to all linked sensors");
+        for (Channel channel : getThing().getChannels()) {
+            if (isLinked(channel.getUID())) {
+                Sensors.sensorForChannel(channel).ifPresent(sensor -> {
+                    logger.debug("Resubscribing to sensor {} for channel {}", sensor, channel.getUID().getId());
+                    try {
+                        handler.subscribeToSensor(sensor, sensor.type);
+                    } catch (Exception e) {
+                        logger.warn("Error resubscribing to sensor {}: {}", sensor, e.getMessage());
+                    }
+                });
+            }
+        }
+    }
+
+    /**
      * Called when a channel is linked to an item.
      * Subscribes to the corresponding sensor if not already subscribed.
      *
@@ -432,7 +476,28 @@ public class ComfoConnectHandler extends BaseThingHandler {
         getThing().getChannels().stream().filter(channel -> channel.getUID().getId().equals(channelId)).findFirst()
                 .ifPresentOrElse(channel -> Sensors.sensorForChannel(channel).ifPresentOrElse(sensor -> {
                     logger.debug("Channel {} linked, subscribing to sensor {}", channelId, sensor);
-                    subscribeToSensorForChannel(sensor);
+
+                    // Track that this sensor now has at least one linked channel
+                    boolean wasFirstChannel = linkedChannelCount == 0;
+                    subscribedSensors.add(sensor.id);
+                    linkedChannelCount++;
+
+                    // Always try to subscribe to the sensor if we're connected
+                    // The protocol handler will handle duplicate subscriptions gracefully
+                    if (isConnected()) {
+                        subscribeToSensorForChannel(sensor);
+
+                        // If this is the first channel being linked after all were removed,
+                        // resubscribe to all linked sensors to ensure RPDO subscriptions work properly
+                        if (wasFirstChannel) {
+                            logger.info(
+                                    "First channel linked after all were removed, resubscribing to all linked sensors");
+                            resubscribeToAllLinkedSensors();
+                        }
+                    } else {
+                        logger.debug("Not subscribing to sensor {} because not connected", sensor);
+                    }
+
                     // Start polling for bypass state if this is the bypassState channel
                     if (ComfoAirBindingConstants.CHANNEL_BYPASS_STATE.equals(channelId)) {
                         startBypassStatePolling();
@@ -449,14 +514,36 @@ public class ComfoConnectHandler extends BaseThingHandler {
     @Override
     public void channelUnlinked(ChannelUID channelUID) {
         logger.debug("Channel {} unlinked", channelUID.getId());
-        // Note: We don't unsubscribe because other channels might use the same sensor,
-        // and the gateway doesn't provide an unsubscribe mechanism anyway.
-        // Leaving the subscription active is harmless - the data just won't be processed.
+        String channelId = channelUID.getId();
 
-        // Stop polling for bypass state if this is the bypassState channel
-        if (ComfoAirBindingConstants.CHANNEL_BYPASS_STATE.equals(channelUID.getId())) {
-            stopBypassStatePolling();
-        }
+        // Find the sensor for this channel
+        getThing().getChannels().stream().filter(channel -> channel.getUID().getId().equals(channelId)).findFirst()
+                .ifPresentOrElse(channel -> {
+                    Sensors.sensorForChannel(channel).ifPresentOrElse(sensor -> {
+                        logger.debug("Channel {} unlinked, checking if sensor {} still has other linked channels",
+                                channelId, sensor);
+
+                        // Check if any other channels for this sensor are still linked
+                        boolean stillHasLinkedChannels = getThing().getChannels().stream()
+                                .filter(ch -> isLinked(ch.getUID()))
+                                .anyMatch(ch -> Sensors.sensorForChannel(ch).map(s -> s.id == sensor.id).orElse(false));
+
+                        if (!stillHasLinkedChannels) {
+                            // No more channels use this sensor, unsubscribe from it
+                            logger.debug("No more linked channels for sensor {}, unsubscribing", sensor);
+                            subscribedSensors.remove(sensor.id);
+                            unsubscribeFromSensorForChannel(sensor);
+
+                            // Decrement linked channel count
+                            linkedChannelCount--;
+                        }
+
+                        // Stop polling for bypass state if this is the bypassState channel
+                        if (ComfoAirBindingConstants.CHANNEL_BYPASS_STATE.equals(channelId)) {
+                            stopBypassStatePolling();
+                        }
+                    }, () -> logger.debug("Channel {} unlinked but no sensor mapping found", channelId));
+                }, () -> logger.debug("Channel {} unlinked but channel not found", channelId));
     }
 
     /**
@@ -466,11 +553,21 @@ public class ComfoConnectHandler extends BaseThingHandler {
      */
     private void subscribeToLinkedChannels() {
         logger.debug("Discovering linked channels and subscribing to sensors");
+
+        // Clear any existing subscriptions
+        subscribedSensors.clear();
+        linkedChannelCount = 0;
+
         for (Channel channel : getThing().getChannels()) {
             if (isLinked(channel.getUID())) {
                 Sensors.sensorForChannel(channel).ifPresent(sensor -> {
                     logger.debug("Channel {} is linked at startup, subscribing to sensor {} ({})",
                             channel.getUID().getId(), sensor.name, sensor.id);
+
+                    // Track that this sensor has at least one linked channel
+                    subscribedSensors.add(sensor.id);
+                    linkedChannelCount++;
+
                     subscribeToSensorForChannel(sensor);
                     // Start polling for bypass state if this is the bypassState channel
                     if (ComfoAirBindingConstants.CHANNEL_BYPASS_STATE.equals(channel.getUID().getId())) {
@@ -479,6 +576,16 @@ public class ComfoConnectHandler extends BaseThingHandler {
                 });
             }
         }
+    }
+
+    /**
+     * Check if a sensor is currently subscribed (has at least one linked channel).
+     *
+     * @param sensor the sensor to check
+     * @return true if the sensor has at least one linked channel
+     */
+    private boolean isSensorSubscribed(Sensor sensor) {
+        return subscribedSensors.contains(sensor.id);
     }
 
     /**
@@ -498,6 +605,26 @@ public class ComfoConnectHandler extends BaseThingHandler {
             handler.subscribeToSensor(sensor, sensor.type);
         } catch (Exception e) {
             logger.warn("Error subscribing to sensor {}: {}", sensor, e.getMessage());
+        }
+    }
+
+    /**
+     * Unsubscribe from a sensor.
+     * Calls the appropriate unsubscription method on the protocol handler.
+     *
+     * @param sensor the sensor to unsubscribe from
+     */
+    private void unsubscribeFromSensorForChannel(Sensor sensor) {
+        ComfoConnectProtocolHandler handler = protocolHandler;
+        if (handler == null) {
+            logger.warn("Cannot unsubscribe from sensor {}: protocol handler not initialized", sensor);
+            return;
+        }
+
+        try {
+            handler.unsubscribeFromSensor(sensor);
+        } catch (Exception e) {
+            logger.warn("Error unsubscribing from sensor {}: {}", sensor, e.getMessage());
         }
     }
 
