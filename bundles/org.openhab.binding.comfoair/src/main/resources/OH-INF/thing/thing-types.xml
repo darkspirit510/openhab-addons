@@ -87,154 +87,74 @@
 		<semantic-equipment-tag>HVAC</semantic-equipment-tag>
 
 		<channels>
-			<channel id="ventilationSpeed" typeId="ventilationSpeed"/>
-			<channel id="operatingMode" typeId="operatingMode"/>
-			<channel id="supplyFanSpeed" typeId="supplyFanSpeed"/>
-			<channel id="exhaustFanSpeed" typeId="exhaustFanSpeed"/>
-			<channel id="supplyFanSpeedSet" typeId="supplyFanSpeedSet"/>
-			<channel id="exhaustFanSpeedSet" typeId="exhaustFanSpeedSet"/>
-			<channel id="supplyFanSpeedPercentage" typeId="supplyFanSpeedPercentage"/>
-			<channel id="exhaustFanSpeedPercentage" typeId="exhaustFanSpeedPercentage"/>
-			<channel id="supplyFanSpeedPercentageSet" typeId="supplyFanSpeedPercentageSet"/>
-			<channel id="exhaustFanSpeedPercentageSet" typeId="exhaustFanSpeedPercentageSet"/>
-			<channel id="bypassState" typeId="bypassState"/>
-			<!-- COMMENTED OUT - User doesn't own preheater sensor -->
-			<!-- <channel id="preheaterState" typeId="preheaterState"/> -->
-			<!-- COMMENTED OUT - User doesn't own these sensors: current humidity, target humidity, humidifier humidity -->
-			<!-- <channel id="currentHumidity" typeId="currentHumidity"/> -->
-			<!-- <channel id="targetHumidity" typeId="targetHumidity"/> -->
-			<!-- <channel id="humidifierHumidity" typeId="humidifierHumidity"/> -->
-			<channel id="weekProfileActive" typeId="weekProfileActive"/>
-			<!-- COMMENTED OUT - User doesn't own these sensors: global allergen mode, ewt speed -->
-			<!-- <channel id="globalAllergenMode" typeId="globalAllergenMode"/> -->
-			<!-- <channel id="ewtSpeed" typeId="ewtSpeed"/> -->
-			<channel id="ewtPosition" typeId="ewtPosition"/>
-			<channel id="enthalpyState" typeId="enthalpyState"/>
-			<channel id="frostProtectionSpeed" typeId="frostProtectionSpeed"/>
-			<channel id="frostProtectionLoss" typeId="frostProtectionLoss"/>
-			<channel id="frostProtectionTimeout" typeId="frostProtectionTimeout"/>
-			<channel id="hcePresent" typeId="hcePresent"/>
-			<channel id="outdoorTemperatureIn" typeId="outdoorTemperatureIn"/>
-			<channel id="outdoorTemperatureOut" typeId="outdoorTemperatureOut"/>
-			<channel id="indoorTemperatureIn" typeId="indoorTemperatureIn"/>
-			<channel id="indoorTemperatureOut" typeId="indoorTemperatureOut"/>
-			<channel id="ewtTemperature" typeId="ewtTemperature"/>
-			<!-- COMMENTED OUT - User doesn't own these sensors: cooker, heater, preheater -->
-			<!-- <channel id="cookerTemperature" typeId="cookerTemperature"/> -->
-			<!-- <channel id="heaterTemperature" typeId="heaterTemperature"/> -->
-			<!-- <channel id="preHeaterTemperature" typeId="preHeaterTemperature"/> -->
-			<channel id="indoorHumidity" typeId="indoorHumidity"/>
-			<channel id="exhaustHumidity" typeId="exhaustHumidity"/>
-			<channel id="indoorHumidity2" typeId="indoorHumidity2"/>
-			<channel id="exhaustHumidity2" typeId="exhaustHumidity2"/>
-			<channel id="indoorHumidity3" typeId="indoorHumidity3"/>
-			<!-- COMMENTED OUT - User doesn't own comfosupply sensor -->
-			<!-- <channel id="comfoSupplyHumidity" typeId="comfoSupplyHumidity"/> -->
-			<!-- COMMENTED OUT - User doesn't own these sensors: T1, T2, T3 sensor presence -->
-			<!-- <channel id="t1SensorPresent" typeId="t1SensorPresent"/> -->
-			<!-- <channel id="t2SensorPresent" typeId="t2SensorPresent"/> -->
-			<!-- <channel id="t3SensorPresent" typeId="t3SensorPresent"/> -->
-			<channel id="temperatureUnit" typeId="temperatureUnit"/>
-			<channel id="airflowConstraints" typeId="airflowConstraints"/>
-
-			<!-- Phase 5: Device state sensors -->
 			<channel id="deviceState" typeId="deviceState"/>
 			<channel id="changingFilters" typeId="changingFilters"/>
 			<channel id="operatingMode2" typeId="operatingMode2"/>
-			<!-- <channel id="sensor33" typeId="sensor33"/> -->
-			<!-- <channel id="sensor37" typeId="sensor37"/> -->
-			<!-- <channel id="sensor53" typeId="sensor53"/> -->
+			<channel id="operatingMode" typeId="operatingMode"/>
+			<channel id="fanSpeedMode" typeId="fanSpeedMode"/>
+			<channel id="bypassActivationState" typeId="bypassActivationState"/>
 			<channel id="profileTemperature" typeId="profileTemperature"/>
-			<channel id="rfPairingMode" typeId="rfPairingMode"/>
-			<channel id="daysToReplaceFilter" typeId="daysToReplaceFilter"/>
-			<channel id="rmot" typeId="rmot"/>
-			<channel id="seasonHeatingActive" typeId="seasonHeatingActive"/>
-			<channel id="seasonCoolingActive" typeId="seasonCoolingActive"/>
-			<channel id="targetTemperature" typeId="targetTemperature"/>
-			<channel id="unitAirflow" typeId="unitAirflow"/>
-			<channel id="comfortControlMode" typeId="comfortControlMode"/>
-			<channel id="frostProtectionUnbalance" typeId="frostProtectionUnbalance"/>
-
-			<!-- Phase 6: Additional fan sensors -->
-			<channel id="supplyFanMode2" typeId="supplyFanMode2"/>
-			<channel id="exhaustFanMode2" typeId="exhaustFanMode2"/>
 			<channel id="supplyFanMode" typeId="supplyFanMode"/>
 			<channel id="exhaustFanMode" typeId="exhaustFanMode"/>
-			<!-- <channel id="sensor85" typeId="sensor85"/> -->
+			<channel id="nextChangeFan" typeId="nextChangeFan"/>
+			<channel id="nextChangeBypass" typeId="nextChangeBypass"/>
 			<channel id="supplyFanNextChange" typeId="supplyFanNextChange"/>
 			<channel id="exhaustFanNextChange" typeId="exhaustFanNextChange"/>
 			<channel id="exhaustFanDuty" typeId="exhaustFanDuty"/>
 			<channel id="supplyFanDuty" typeId="supplyFanDuty"/>
 			<channel id="exhaustFanFlow" typeId="exhaustFanFlow"/>
 			<channel id="supplyFanFlow" typeId="supplyFanFlow"/>
-			<channel id="exhaustFanSpeedRpm" typeId="exhaustFanSpeedRpm"/>
-			<channel id="supplyFanSpeedRpm" typeId="supplyFanSpeedRpm"/>
-			<channel id="fanSpeedModeModulated" typeId="fanSpeedModeModulated"/>
-			<!-- <channel id="supplyFanMode3" typeId="supplyFanMode3"/> -->
-			<!-- <channel id="exhaustFanMode3" typeId="exhaustFanMode3"/> -->
-
-			<!-- Phase 7: Bypass sensors -->
-			<channel id="bypassActivationState" typeId="bypassActivationState"/>
-			<!-- <channel id="bypassOverride" typeId="bypassOverride"/> -->
-
-			<!-- Phase 8: Power and energy sensors -->
+			<channel id="exhaustFanSpeed" typeId="exhaustFanSpeed"/>
+			<channel id="supplyFanSpeed" typeId="supplyFanSpeed"/>
 			<channel id="powerUsage" typeId="powerUsage"/>
 			<channel id="powerUsageTotalYear" typeId="powerUsageTotalYear"/>
 			<channel id="powerUsageTotal" typeId="powerUsageTotal"/>
-			<channel id="preheaterPowerTotalYear" typeId="preheaterPowerTotalYear"/>
-			<channel id="preheaterPowerTotal" typeId="preheaterPowerTotal"/>
-			<channel id="preheaterPower" typeId="preheaterPower"/>
+			<channel id="rfPairingMode" typeId="rfPairingMode"/>
+			<channel id="daysToReplaceFilter" typeId="daysToReplaceFilter"/>
+			<channel id="unitTemperature" typeId="unitTemperature"/>
+			<channel id="rmot" typeId="rmot"/>
+			<channel id="seasonHeatingActive" typeId="seasonHeatingActive"/>
+			<channel id="seasonCoolingActive" typeId="seasonCoolingActive"/>
+			<channel id="targetTemperature" typeId="targetTemperature"/>
 			<channel id="avoidedHeating" typeId="avoidedHeating"/>
 			<channel id="avoidedHeatingTotalYear" typeId="avoidedHeatingTotalYear"/>
 			<channel id="avoidedHeatingTotal" typeId="avoidedHeatingTotal"/>
 			<channel id="avoidedCooling" typeId="avoidedCooling"/>
 			<channel id="avoidedCoolingTotalYear" typeId="avoidedCoolingTotalYear"/>
 			<channel id="avoidedCoolingTotal" typeId="avoidedCoolingTotal"/>
-
-			<!-- Phase 9: Temperature sensors -->
-			<!-- <channel id="sensor220" typeId="sensor220"/> -->
+			<channel id="fanSpeedModeModulated" typeId="fanSpeedModeModulated"/>
+			<channel id="bypassState" typeId="bypassState"/>
+			<channel id="frostProtectionUnbalance" typeId="frostProtectionUnbalance"/>
+			<channel id="airflowConstraints" typeId="airflowConstraints"/>
 			<channel id="supplyAirTemperature" typeId="supplyAirTemperature"/>
 			<channel id="extractAirTemperature" typeId="extractAirTemperature"/>
 			<channel id="exhaustAirTemperature" typeId="exhaustAirTemperature"/>
 			<channel id="outdoorAirTemperature" typeId="outdoorAirTemperature"/>
-			<!-- <channel id="sensor277" typeId="sensor277"/> -->
-			<!-- <channel id="sensor278" typeId="sensor278"/> -->
-			<!-- <channel id="comfoFondTempOutdoor" typeId="comfoFondTempOutdoor"/> -->
-			<!-- <channel id="comfoFondTempGround" typeId="comfoFondTempGround"/> -->
-			<!-- <channel id="comfoCoolCondensorTemp" typeId="comfoCoolCondensorTemp"/> -->
-
-			<!-- Phase 10: Humidity sensors -->
+			<channel id="unitAirflow" typeId="unitAirflow"/>
+			<channel id="comfortControlMode" typeId="comfortControlMode"/>
 			<channel id="extractAirHumidity" typeId="extractAirHumidity"/>
 			<channel id="exhaustAirHumidity" typeId="exhaustAirHumidity"/>
 			<channel id="outdoorAirHumidity" typeId="outdoorAirHumidity"/>
 			<channel id="humidityAfterPreheater" typeId="humidityAfterPreheater"/>
 			<channel id="supplyAirHumidity" typeId="supplyAirHumidity"/>
-
-			<!-- Phase 11: Boolean sensors -->
-			<!-- <channel id="comfoFondGhePresent" typeId="comfoFondGhePresent"/> -->
-			<!-- <channel id="sensor785" typeId="sensor785"/> -->
-			<!-- <channel id="sensor386" typeId="sensor386"/> -->
-			<!-- <channel id="sensor402" typeId="sensor402"/> -->
-			<!-- <channel id="comfoFondGheState" typeId="comfoFondGheState"/> -->
-
-			<!-- Phase 12: Analog input sensors -->
-			<!-- <channel id="analogInput1" typeId="analogInput1"/> -->
-			<!-- <channel id="analogInput2" typeId="analogInput2"/> -->
-			<!-- <channel id="analogInput3" typeId="analogInput3"/> -->
-			<!-- <channel id="analogInput4" typeId="analogInput4"/> -->
-
-			<!-- Phase 13: ComfoCool sensors -->
-			<!-- <channel id="comfoCoolState" typeId="comfoCoolState"/> -->
-
-			<!-- Phase 14: Miscellaneous sensors -->
-			<!-- <channel id="sensor219" typeId="sensor219"/> -->
-			<!-- <channel id="sensor321" typeId="sensor321"/> -->
-			<!-- <channel id="sensor325" typeId="sensor325"/> -->
-			<!-- <channel id="sensor337" typeId="sensor337"/> -->
-			<!-- <channel id="sensor341" typeId="sensor341"/> -->
-			<!-- <channel id="sensor384" typeId="sensor384"/> -->
-			<!-- <channel id="sensor400" typeId="sensor400"/> -->
-			<!-- <channel id="sensor401" typeId="sensor401"/> -->
+			<channel id="bypassOverride" typeId="bypassOverride"/>
+			<channel id="supplyFanMode2" typeId="supplyFanMode2"/>
+			<channel id="exhaustFanMode2" typeId="exhaustFanMode2"/>
+			<channel id="supplyFanMode3" typeId="supplyFanMode3"/>
+			<channel id="exhaustFanMode3" typeId="exhaustFanMode3"/>
+			<channel id="analogInput1" typeId="analogInput1"/>
+			<channel id="analogInput2" typeId="analogInput2"/>
+			<channel id="analogInput3" typeId="analogInput3"/>
+			<channel id="analogInput4" typeId="analogInput4"/>
+			<channel id="comfoFondTempOutdoor" typeId="comfoFondTempOutdoor"/>
+			<channel id="comfoFondTempGround" typeId="comfoFondTempGround"/>
+			<channel id="comfoFondGheState" typeId="comfoFondGheState"/>
+			<channel id="comfoFondGhePresent" typeId="comfoFondGhePresent"/>
+			<channel id="comfoCoolState" typeId="comfoCoolState"/>
+			<channel id="comfoCoolCondensorTemp" typeId="comfoCoolCondensorTemp"/>
+			<channel id="preheaterPower" typeId="preheaterPower"/>
+			<channel id="preheaterPowerTotalYear" typeId="preheaterPowerTotalYear"/>
+			<channel id="preheaterPowerTotal" typeId="preheaterPowerTotal"/>
 		</channels>
 
 		<properties>
@@ -2411,7 +2331,7 @@
 		<label>Exhaust Fan Duty</label>
 		<description>Exhaust fan duty cycle percentage</description>
 		<category>fan</category>
-		<state readOnly="true" pattern="%d %%"/>
+		<state readOnly="true" pattern="%.0f %%"/>
 	</channel-type>
 
 	<channel-type id="supplyFanDuty">
@@ -2419,7 +2339,7 @@
 		<label>Supply Fan Duty</label>
 		<description>Supply fan duty cycle percentage</description>
 		<category>fan</category>
-		<state readOnly="true" pattern="%d %%"/>
+		<state readOnly="true" pattern="%.0f %%"/>
 	</channel-type>
 
 	<channel-type id="exhaustFanFlow">

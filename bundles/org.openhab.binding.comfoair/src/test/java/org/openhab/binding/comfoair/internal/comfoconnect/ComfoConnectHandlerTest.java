@@ -86,6 +86,8 @@ public class ComfoConnectHandlerTest {
                 argumentsOf(145, new byte[] { (byte) 0xB0, 0x04 }, new DecimalType(1200)),
                 // Sensor 146: Preheater Power (0x0092) - UINT16, value 250W (0x00FA in little-endian)
                 argumentsOf(146, new byte[] { (byte) 0xFA, 0x00 }, new DecimalType(250)),
+                // Sensor 192: Days to Replace Filter (0x00C0) - UINT16, value 90 days (0x005A in little-endian)
+                argumentsOf(192, new byte[] { 0x5A, 0x00 }, new DecimalType(90)),
                 // Sensor 213: Avoided Heating Power (0x00D5) - UINT16, value 150W (0x0096 in little-endian)
                 argumentsOf(213, new byte[] { (byte) 0x96, 0x00 }, new DecimalType(150)),
                 // Sensor 214: Avoided Heating Total Year (0x00D6) - UINT16, value 250 kWh (0x00FA in little-endian)
