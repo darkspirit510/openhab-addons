@@ -46,22 +46,4 @@ public class TestSensorCallback implements SensorDataCallback {
     public Zehnder.CnRpdoNotification getMessage() {
         return message;
     }
-
-    /**
-     * Get the raw sensor value for backward compatibility with tests.
-     * Extracts the value from the protobuf message.
-     *
-     * @return the raw sensor value
-     */
-    public int getValue() {
-        if (message == null || !message.hasData()) {
-            return 0;
-        }
-
-        byte[] data = message.getData().toByteArray();
-        if (data.length >= 4) {
-            return sensor.parseValueFrom(data);
-        }
-        return 0;
-    }
 }

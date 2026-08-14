@@ -16,6 +16,8 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.core.library.types.DecimalType;
 import org.openhab.core.types.State;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.zehnder.proto.Zehnder;
 
@@ -27,6 +29,7 @@ import com.zehnder.proto.Zehnder;
  */
 @NonNullByDefault
 public class DecimalSensor extends Sensor {
+    private final Logger logger = LoggerFactory.getLogger(DecimalSensor.class);
     private DecimalTransformation transformation = (i) -> i;
 
     public DecimalSensor(String name, int id, SensorValueType type, String channelId) {
@@ -40,12 +43,30 @@ public class DecimalSensor extends Sensor {
 
     @Override
     public @Nullable State valueAsState(Zehnder.CnRpdoNotification message) {
-        return new DecimalType(transformation.transform(extractValueFrom(message)));
+        byte[] payload = message.getData().toByteArray();
+        double rawValue = extractValueFrom(payload);
+        double transformedValue = transformation.transform(rawValue);
+
+        logger.info("Sensor {}: raw={}, transformed={}, payload_hex={}", name, rawValue, transformedValue,
+                bytesToHex(payload));
+        return new DecimalType(transformedValue);
     }
 
-    private long extractValueFrom(Zehnder.CnRpdoNotification message) {
-        byte[] payload = message.getData().toByteArray();
+    /**
+     * Convert byte array to hex string for logging.
+     *
+     * @param bytes the byte array to convert
+     * @return hex string representation
+     */
+    private String bytesToHex(byte[] bytes) {
+        StringBuilder sb = new StringBuilder();
+        for (byte b : bytes) {
+            sb.append(String.format("%02X", b & 0xFF)).append(" ");
+        }
+        return sb.toString().trim();
+    }
 
+    private double extractValueFrom(byte[] payload) {
         return switch (type) {
             case TYPE_CN_UINT8 -> extractUnsignedByte(payload);
             case TYPE_CN_UINT16 -> extractUnsignedShort(payload);
@@ -63,11 +84,10 @@ public class DecimalSensor extends Sensor {
      * @param payload the payload bytes
      * @return the extracted unsigned byte value
      */
-    private long extractUnsignedByte(byte[] payload) {
+    private double extractUnsignedByte(byte[] payload) {
         if (payload.length >= 1) {
-            return payload[0] & 0xFF;
+            return (payload[0] & 0xFF);
         }
-
         return 0;
     }
 
@@ -77,11 +97,10 @@ public class DecimalSensor extends Sensor {
      * @param payload the payload bytes
      * @return the extracted unsigned short value
      */
-    private long extractUnsignedShort(byte[] payload) {
+    private double extractUnsignedShort(byte[] payload) {
         if (payload.length >= 2) {
             return ((payload[1] & 0xFF) << 8) | (payload[0] & 0xFF);
         }
-
         return 0;
     }
 
@@ -91,12 +110,11 @@ public class DecimalSensor extends Sensor {
      * @param payload the payload bytes
      * @return the extracted unsigned int value
      */
-    private long extractUnsignedInt(byte[] payload) {
+    private double extractUnsignedInt(byte[] payload) {
         if (payload.length >= 4) {
             return ((payload[3] & 0xFFL) << 24) | ((payload[2] & 0xFFL) << 16) | ((payload[1] & 0xFFL) << 8)
                     | (payload[0] & 0xFFL);
         }
-
         return 0;
     }
 
@@ -106,11 +124,10 @@ public class DecimalSensor extends Sensor {
      * @param payload the payload bytes
      * @return the extracted signed byte value
      */
-    private long extractSignedByte(byte[] payload) {
+    private double extractSignedByte(byte[] payload) {
         if (payload.length >= 1) {
             return payload[0];
         }
-
         return 0;
     }
 
@@ -120,17 +137,14 @@ public class DecimalSensor extends Sensor {
      * @param payload the payload bytes
      * @return the extracted signed short value
      */
-    private int extractSignedShort(byte[] payload) {
+    private double extractSignedShort(byte[] payload) {
         if (payload.length >= 2) {
             int value = ((payload[1] & 0xFF) << 8) | (payload[0] & 0xFF);
-
             if ((value & 0x8000) != 0) {
                 value -= 0x10000;
             }
-
             return value;
         }
-
         return 0;
     }
 
@@ -140,13 +154,13 @@ public class DecimalSensor extends Sensor {
      * @param payload the payload bytes
      * @return the extracted signed long value
      */
-    private long extractSignedLong(byte[] payload) {
+    private double extractSignedLong(byte[] payload) {
         if (payload.length >= 8) {
-            return ((payload[7] & 0xFFL) << 56) | ((payload[6] & 0xFFL) << 48) | ((payload[5] & 0xFFL) << 40)
+            long value = ((payload[7] & 0xFFL) << 56) | ((payload[6] & 0xFFL) << 48) | ((payload[5] & 0xFFL) << 40)
                     | ((payload[4] & 0xFFL) << 32) | ((payload[3] & 0xFFL) << 24) | ((payload[2] & 0xFFL) << 16)
                     | ((payload[1] & 0xFFL) << 8) | (payload[0] & 0xFFL);
+            return value;
         }
-
         return 0;
     }
 }

@@ -330,7 +330,7 @@ public class ComfoConnectHandler extends BaseThingHandler {
      * @param message the protobuf message containing sensor data
      */
     private void handleSensorData(final Sensor sensor, final Zehnder.CnRpdoNotification message) {
-        logger.debug("handleSensorData called: sensor={}", sensor);
+        logger.info("handleSensorData called: sensor={}", sensor);
 
         State state = sensor.valueAsState(message);
 
@@ -338,7 +338,7 @@ public class ComfoConnectHandler extends BaseThingHandler {
             // Update the channel state using the sensor's channel ID
             updateChannelState(sensor.channelId, state);
         } else {
-            logger.debug("Ignoring data for unknown sensor: {}", sensor);
+            logger.info("Ignoring data for unknown sensor: {}", sensor);
         }
     }
 
@@ -351,7 +351,7 @@ public class ComfoConnectHandler extends BaseThingHandler {
     private void updateChannelState(final String channelId, final org.openhab.core.types.State state) {
         try {
             ChannelUID channelUID = new ChannelUID(getThing().getUID(), channelId);
-            logger.debug("Updating channel {} to state {}", channelId, state);
+            logger.info("Updating channel {} to state {}", channelId, state);
             updateState(channelUID, state);
         } catch (Exception e) {
             logger.error("Error updating channel {}: {}", channelId, e.getMessage(), e);

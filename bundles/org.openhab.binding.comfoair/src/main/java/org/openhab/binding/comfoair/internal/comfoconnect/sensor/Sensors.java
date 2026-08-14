@@ -100,7 +100,8 @@ public class Sensors {
         sensors.add(new DecimalSensor("Preheater State", 82, TYPE_CN_UINT8, "preheaterState"));
         sensors.add(new DecimalSensor("Current Humidity", 10, TYPE_CN_UINT8, "currentHumidity"));
         sensors.add(new DecimalSensor("Target Humidity", 11, TYPE_CN_UINT8, "targetHumidity"));
-        sensors.add(new DecimalSensor("Humidifier Humidity", 209, TYPE_CN_UINT8, "humidifierHumidity"));
+        sensors.add(new DecimalSensor("Running Mean Outdoor Temperature", 209, TYPE_CN_INT16, "rmotTemperature")
+                .withTransformation(v -> v / 10.0));
 
         // Phase 2: Other basic sensors (no value corrections)
         sensors.add(new DecimalSensor("Week Profile Active", 12, TYPE_CN_UINT8, "weekProfileActive"));

@@ -665,9 +665,9 @@ public class ComfoConnectProtocolHandler {
      */
     public void subscribeToSensor(final Sensor sensor, final SensorValueType sensorType) {
         try {
-            logger.debug("Subscribing to sensor {} (PDO {} type {})", sensor, sensor.id, sensorType.value);
+            logger.info("Subscribing to sensor {} (PDO {} type {})", sensor, sensor.id, sensorType.value);
             connector.sendRpdoRequest(sensor.id, sensorType.value);
-            logger.debug("Sensor {} subscription request sent successfully", sensor);
+            logger.info("Sensor {} subscription request sent successfully", sensor);
         } catch (IOException e) {
             logger.warn("Failed to subscribe to sensor {}: {}", sensor, e.getMessage());
             // Check if this is a connection-related error and trigger reconnection
@@ -758,7 +758,7 @@ public class ComfoConnectProtocolHandler {
                 return;
             }
 
-            logger.debug("RPDO notification for sensor: {}", sensor);
+            logger.info("RPDO notification for sensor: {}", sensor);
 
             // Route to appropriate handler based on sensor ID
             SensorDataCallback callback = sensorCallback;

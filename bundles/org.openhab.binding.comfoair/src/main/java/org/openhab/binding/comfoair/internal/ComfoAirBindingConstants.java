@@ -227,4 +227,12 @@ public class ComfoAirBindingConstants {
     // Reset channels
     public static final String CHANNEL_FILTER_RESET = "filterReset";
     public static final String CHANNEL_ERROR_RESET = "errorReset";
+
+    // Avoided energy channels
+    public static final String CHANNEL_AVOIDED_HEATING = "avoidedHeating";
+    public static final String CHANNEL_AVOIDED_HEATING_TOTAL_YEAR = "avoidedHeatingTotalYear";
+    public static final String CHANNEL_AVOIDED_HEATING_TOTAL = "avoidedHeatingTotal";
+    public static final String CHANNEL_AVOIDED_COOLING = "avoidedCooling";
+    public static final String CHANNEL_AVOIDED_COOLING_TOTAL_YEAR = "avoidedCoolingTotalYear";
+    public static final String CHANNEL_AVOIDED_COOLING_TOTAL = "avoidedCoolingTotal";
 }

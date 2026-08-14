@@ -2509,7 +2509,7 @@
 		<label>Power Usage</label>
 		<description>Current power usage</description>
 		<category>Power</category>
-		<state readOnly="true" pattern="%.0f W"/>
+		<state readOnly="true" pattern="%d W"/>
 	</channel-type>
 
 	<channel-type id="powerUsageTotalYear">
@@ -2517,7 +2517,7 @@
 		<label>Power Usage Total Year</label>
 		<description>Power usage total for current year</description>
 		<category>Energy</category>
-		<state readOnly="true" pattern="%.0f kWh"/>
+		<state readOnly="true" pattern="%d kWh"/>
 	</channel-type>
 
 	<channel-type id="powerUsageTotal">
@@ -2525,7 +2525,7 @@
 		<label>Power Usage Total</label>
 		<description>Total power usage</description>
 		<category>Energy</category>
-		<state readOnly="true" pattern="%.0f kWh"/>
+		<state readOnly="true" pattern="%d kWh"/>
 	</channel-type>
 
 	<channel-type id="preheaterPowerTotalYear">
@@ -2533,7 +2533,7 @@
 		<label>Preheater Power Total Year</label>
 		<description>Preheater power usage total for current year</description>
 		<category>Energy</category>
-		<state readOnly="true" pattern="%.0f kWh"/>
+		<state readOnly="true" pattern="%d kWh"/>
 	</channel-type>
 
 	<channel-type id="preheaterPowerTotal">
@@ -2541,7 +2541,7 @@
 		<label>Preheater Power Total</label>
 		<description>Total preheater power usage</description>
 		<category>Energy</category>
-		<state readOnly="true" pattern="%.0f kWh"/>
+		<state readOnly="true" pattern="%d kWh"/>
 	</channel-type>
 
 	<channel-type id="preheaterPower">
@@ -2549,7 +2549,7 @@
 		<label>Preheater Power</label>
 		<description>Current preheater power usage</description>
 		<category>Power</category>
-		<state readOnly="true" pattern="%.0f W"/>
+		<state readOnly="true" pattern="%d W"/>
 	</channel-type>
 
 	<channel-type id="avoidedHeating">
@@ -2687,7 +2687,7 @@
 		<label>Extract Air Humidity</label>
 		<description>Extract air humidity level</description>
 		<category>Humidity</category>
-		<state readOnly="true" pattern="%.1f %%"/>
+		<state readOnly="true" pattern="%d %%"/>
 	</channel-type>
 
 	<channel-type id="exhaustAirHumidity">
@@ -2695,7 +2695,7 @@
 		<label>Exhaust Air Humidity</label>
 		<description>Exhaust air humidity level</description>
 		<category>Humidity</category>
-		<state readOnly="true" pattern="%.1f %%"/>
+		<state readOnly="true" pattern="%d %%"/>
 	</channel-type>
 
 	<channel-type id="outdoorAirHumidity">
@@ -2703,7 +2703,7 @@
 		<label>Outdoor Air Humidity</label>
 		<description>Outdoor air humidity level</description>
 		<category>Humidity</category>
-		<state readOnly="true" pattern="%.1f %%"/>
+		<state readOnly="true" pattern="%d %%"/>
 	</channel-type>
 
 	<channel-type id="humidityAfterPreheater" advanced="true">
@@ -2711,7 +2711,7 @@
 		<label>Humidity After Preheater</label>
 		<description>Outdoor air humidity after preheater</description>
 		<category>Humidity</category>
-		<state readOnly="true" pattern="%.1f %%"/>
+		<state readOnly="true" pattern="%d %%"/>
 	</channel-type>
 
 	<channel-type id="supplyAirHumidity">
@@ -2719,7 +2719,7 @@
 		<label>Supply Air Humidity</label>
 		<description>Supply air humidity level</description>
 		<category>Humidity</category>
-		<state readOnly="true" pattern="%.1f %%"/>
+		<state readOnly="true" pattern="%d %%"/>
 	</channel-type>
 
 	<!-- Phase 11: Boolean sensors -->
@@ -2868,6 +2868,81 @@
 		<description>Unknown sensor 401</description>
 		<category>Number</category>
 		<state readOnly="true"/>
+	</channel-type>
+
+	<!-- Avoided Energy Channel Types -->
+	<channel-type id="avoidedHeating">
+		<item-type>Number:Power</item-type>
+		<label>Avoided Heating Power</label>
+		<description>Current avoided heating power usage</description>
+		<category>Number</category>
+		<tags>
+			<tag>Measurement</tag>
+			<tag>Power</tag>
+			<tag>Energy</tag>
+		</tags>
+		<state readOnly="true" pattern="%d W"/>
+	</channel-type>
+
+	<channel-type id="avoidedHeatingTotalYear">
+		<item-type>Number:Energy</item-type>
+		<label>Avoided Heating Energy (Year)</label>
+		<description>Total avoided heating energy usage for current year</description>
+		<category>Number</category>
+		<tags>
+			<tag>Measurement</tag>
+			<tag>Energy</tag>
+		</tags>
+		<state readOnly="true" pattern="%d kWh"/>
+	</channel-type>
+
+	<channel-type id="avoidedHeatingTotal">
+		<item-type>Number:Energy</item-type>
+		<label>Avoided Heating Energy (Total)</label>
+		<description>Total avoided heating energy usage since installation</description>
+		<category>Number</category>
+		<tags>
+			<tag>Measurement</tag>
+			<tag>Energy</tag>
+		</tags>
+		<state readOnly="true" pattern="%d kWh"/>
+	</channel-type>
+
+	<channel-type id="avoidedCooling">
+		<item-type>Number:Power</item-type>
+		<label>Avoided Cooling Power</label>
+		<description>Current avoided cooling power usage</description>
+		<category>Number</category>
+		<tags>
+			<tag>Measurement</tag>
+			<tag>Power</tag>
+			<tag>Energy</tag>
+		</tags>
+		<state readOnly="true" pattern="%d W"/>
+	</channel-type>
+
+	<channel-type id="avoidedCoolingTotalYear">
+		<item-type>Number:Energy</item-type>
+		<label>Avoided Cooling Energy (Year)</label>
+		<description>Total avoided cooling energy usage for current year</description>
+		<category>Number</category>
+		<tags>
+			<tag>Measurement</tag>
+			<tag>Energy</tag>
+		</tags>
+		<state readOnly="true" pattern="%d kWh"/>
+	</channel-type>
+
+	<channel-type id="avoidedCoolingTotal">
+		<item-type>Number:Energy</item-type>
+		<label>Avoided Cooling Energy (Total)</label>
+		<description>Total avoided cooling energy usage since installation</description>
+		<category>Number</category>
+		<tags>
+			<tag>Measurement</tag>
+			<tag>Energy</tag>
+		</tags>
+		<state readOnly="true" pattern="%d kWh"/>
 	</channel-type>
 
 </thing:thing-descriptions>

@@ -71,44 +71,4 @@ public abstract class Sensor {
     public String toString() {
         return name + " (" + id + ")";
     }
-
-    /**
-     * Extract the sensor value from RPDO notification payload based on the sensor's type.
-     *
-     * @param payload the RPDO notification payload
-     * @return the extracted sensor value
-     */
-    public int parseValueFrom(byte[] payload) {
-        if (payload.length < 1) {
-            return 0;
-        }
-
-        switch (type) {
-            // For UINT8 sensors: byte 0 contains the value
-            case TYPE_CN_UINT8 -> {
-                return payload[0] & 0xFF;
-            }
-
-            // For UINT16 sensors: bytes 0-1 are value (little-endian)
-            case TYPE_CN_UINT16 -> {
-                if (payload.length >= 2) {
-                    return ((payload[1] & 0xFF) << 8) | (payload[0] & 0xFF);
-                }
-            }
-
-            // For INT16 sensors: bytes 0-1 are value (little-endian, signed)
-            case TYPE_CN_INT16 -> {
-                if (payload.length >= 2) {
-                    int value = ((payload[1] & 0xFF) << 8) | (payload[0] & 0xFF);
-                    if ((value & 0x8000) != 0) {
-                        value -= 0x10000;
-                    }
-                    return value;
-                }
-            }
-        }
-
-        // Default to UINT8 at byte 0 for unknown types
-        return payload[0] & 0xFF;
-    }
 }

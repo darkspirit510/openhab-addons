@@ -160,7 +160,8 @@ public class ComfoConnectTcpConnector extends ComfoConnectConnector {
             Zehnder.CnRpdoRequest.Builder rpdoBuilder = Zehnder.CnRpdoRequest.newBuilder();
             rpdoBuilder.setPdid(pdid);
             rpdoBuilder.setType(type);
-            logger.debug("Built CnRpdoRequest: pdid={}, type={}", pdid, type);
+            rpdoBuilder.setZone(1); // Zone must be set to 1, matching aiocomfoconnect
+            logger.debug("Built CnRpdoRequest: pdid={}, type={}, zone={}", pdid, type, 1);
 
             byte[] frame = getFramer().createFrame(
                     Zehnder.GatewayOperation.newBuilder()

@@ -182,6 +182,7 @@ public class ListRegisteredAppsUseCaseTest {
     private byte[] uuidToBytes(UUID uuid) {
         byte[] bytes = new byte[16];
         ByteBuffer.wrap(bytes).putLong(uuid.getMostSignificantBits()).putLong(uuid.getLeastSignificantBits());
+
         return bytes;
     }
 }

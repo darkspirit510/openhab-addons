@@ -73,7 +73,31 @@ public class ComfoConnectHandlerTest {
                 // Sensor 292: Outdoor Air Humidity (0x0124) - UINT8, value 75%
                 argumentsOf(292, new byte[] { 75 }, new DecimalType(75)),
                 // Sensor 294: Supply Air Humidity (0x0126) - UINT8, value 50%
-                argumentsOf(294, new byte[] { 50 }, new DecimalType(50)));
+                argumentsOf(294, new byte[] { 50 }, new DecimalType(50)),
+                // Sensor 128: Power Usage (0x0080) - UINT16, value 200W (0x00C8 in little-endian)
+                argumentsOf(128, new byte[] { (byte) 0xC8, 0x00 }, new DecimalType(200)),
+                // Sensor 129: Power Usage Total Year (0x0081) - UINT16, value 1500 kWh (0x05DC in little-endian)
+                argumentsOf(129, new byte[] { (byte) 0xDC, 0x05 }, new DecimalType(1500)),
+                // Sensor 130: Power Usage Total (0x0082) - UINT16, value 3000 kWh (0x0BB8 in little-endian)
+                argumentsOf(130, new byte[] { (byte) 0xB8, 0x0B }, new DecimalType(3000)),
+                // Sensor 144: Preheater Power Total Year (0x0090) - UINT16, value 800 kWh (0x0320 in little-endian)
+                argumentsOf(144, new byte[] { 0x20, 0x03 }, new DecimalType(800)),
+                // Sensor 145: Preheater Power Total (0x0091) - UINT16, value 1200 kWh (0x04B0 in little-endian)
+                argumentsOf(145, new byte[] { (byte) 0xB0, 0x04 }, new DecimalType(1200)),
+                // Sensor 146: Preheater Power (0x0092) - UINT16, value 250W (0x00FA in little-endian)
+                argumentsOf(146, new byte[] { (byte) 0xFA, 0x00 }, new DecimalType(250)),
+                // Sensor 213: Avoided Heating Power (0x00D5) - UINT16, value 150W (0x0096 in little-endian)
+                argumentsOf(213, new byte[] { (byte) 0x96, 0x00 }, new DecimalType(150)),
+                // Sensor 214: Avoided Heating Total Year (0x00D6) - UINT16, value 250 kWh (0x00FA in little-endian)
+                argumentsOf(214, new byte[] { (byte) 0xFA, 0x00 }, new DecimalType(250)),
+                // Sensor 215: Avoided Heating Total (0x00D7) - UINT16, value 500 kWh (0x01F4 in little-endian)
+                argumentsOf(215, new byte[] { (byte) 0xF4, 0x01 }, new DecimalType(500)),
+                // Sensor 216: Avoided Cooling Power (0x00D8) - UINT16, value 100W (0x0064 in little-endian)
+                argumentsOf(216, new byte[] { 0x64, 0x00 }, new DecimalType(100)),
+                // Sensor 217: Avoided Cooling Total Year (0x00D9) - UINT16, value 180 kWh (0x00B4 in little-endian)
+                argumentsOf(217, new byte[] { (byte) 0xB4, 0x00 }, new DecimalType(180)),
+                // Sensor 218: Avoided Cooling Total (0x00DA) - UINT16, value 350 kWh (0x015E in little-endian)
+                argumentsOf(218, new byte[] { (byte) 0x5E, 0x01 }, new DecimalType(350)));
     }
 
     private static @NonNull Arguments argumentsOf(int sensorId, byte[] payload, State state) {
