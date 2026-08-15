@@ -119,6 +119,35 @@
 		<label>Airflow Constraints</label>
 		<description>Individual airflow constraint indicators</description>
 		<category>Switch</category>
+		<channels>
+			<channel id="airflowConstraintResistance" typeId="airflowConstraintResistance"/>
+			<channel id="airflowConstraintPreheaterNegative" typeId="airflowConstraintPreheaterNegative"/>
+			<channel id="airflowConstraintNoiseGuard" typeId="airflowConstraintNoiseGuard"/>
+			<channel id="airflowConstraintResistanceGuard" typeId="airflowConstraintResistanceGuard"/>
+			<channel id="airflowConstraintFrostProtection" typeId="airflowConstraintFrostProtection"/>
+			<channel id="airflowConstraintBypass" typeId="airflowConstraintBypass"/>
+			<channel id="airflowConstraintAnalogInput1" typeId="airflowConstraintAnalogInput1"/>
+			<channel id="airflowConstraintAnalogInput2" typeId="airflowConstraintAnalogInput2"/>
+			<channel id="airflowConstraintAnalogInput3" typeId="airflowConstraintAnalogInput3"/>
+			<channel id="airflowConstraintAnalogInput4" typeId="airflowConstraintAnalogInput4"/>
+			<channel id="airflowConstraintHood" typeId="airflowConstraintHood"/>
+			<channel id="airflowConstraintAnalogPreset" typeId="airflowConstraintAnalogPreset"/>
+			<channel id="airflowConstraintComfoCool" typeId="airflowConstraintComfoCool"/>
+			<channel id="airflowConstraintPreheaterPositive" typeId="airflowConstraintPreheaterPositive"/>
+			<channel id="airflowConstraintRfSensorFlowPreset" typeId="airflowConstraintRfSensorFlowPreset"/>
+			<channel id="airflowConstraintRfSensorFlowProportional" typeId="airflowConstraintRfSensorFlowProportional"/>
+			<channel id="airflowConstraintTemperatureComfort" typeId="airflowConstraintTemperatureComfort"/>
+			<channel id="airflowConstraintHumidityComfort" typeId="airflowConstraintHumidityComfort"/>
+			<channel id="airflowConstraintHumidityProtection" typeId="airflowConstraintHumidityProtection"/>
+			<channel id="airflowConstraintCo2Zone1" typeId="airflowConstraintCo2Zone1"/>
+			<channel id="airflowConstraintCo2Zone2" typeId="airflowConstraintCo2Zone2"/>
+			<channel id="airflowConstraintCo2Zone3" typeId="airflowConstraintCo2Zone3"/>
+			<channel id="airflowConstraintCo2Zone4" typeId="airflowConstraintCo2Zone4"/>
+			<channel id="airflowConstraintCo2Zone5" typeId="airflowConstraintCo2Zone5"/>
+			<channel id="airflowConstraintCo2Zone6" typeId="airflowConstraintCo2Zone6"/>
+			<channel id="airflowConstraintCo2Zone7" typeId="airflowConstraintCo2Zone7"/>
+			<channel id="airflowConstraintCo2Zone8" typeId="airflowConstraintCo2Zone8"/>
+		</channels>
 	</channel-group-type>
 
 	<channel-type id="airflowConstraintResistance">
@@ -344,26 +373,23 @@
 
 		<channel-groups>
 			<channel-group id="deviceState" typeId="deviceStateGroup"/>
-			<channel-group id="operatingModes" typeId="operatingModes"/>
+			<channel-group id="mainControl" typeId="mainControl"/>
 			<channel-group id="fanModes" typeId="fanModes"/>
 			<channel-group id="fanNextChanges" typeId="fanNextChanges"/>
+			<channel-group id="fanModes2" typeId="fanModes2"/>
 			<channel-group id="fanDutyFlow" typeId="fanDutyFlow"/>
-			<channel-group id="powerUsage" typeId="powerUsage"/>
-			<channel-group id="preheaterPower" typeId="preheaterPower"/>
-			<channel-group id="rfFilter" typeId="rfFilter"/>
-			<channel-group id="unitTemperature" typeId="unitTemperature"/>
+			<channel-group id="power" typeId="power"/>
+			<channel-group id="maintenance" typeId="maintenance"/>
+			<channel-group id="temperatures" typeId="temperaturesComfoconnect"/>
 			<channel-group id="seasons" typeId="seasons"/>
-			<channel-group id="targetTemperature" typeId="targetTemperature"/>
 			<channel-group id="avoidedEnergy" typeId="avoidedEnergy"/>
 			<channel-group id="fanModulatedBypass" typeId="fanModulatedBypass"/>
-			<channel-group id="temperatures" typeId="temperaturesComfoconnect"/>
 			<channel-group id="unitAirflow" typeId="unitAirflow"/>
 			<channel-group id="comfortControl" typeId="comfortControl"/>
 			<channel-group id="humidity" typeId="humidity"/>
 			<channel-group id="bypassOverride" typeId="bypassOverride"/>
-			<channel-group id="fanModes2" typeId="fanModes2"/>
-			<channel-group id="fanModes3" typeId="fanModes3"/>
 			<channel-group id="analogInputs" typeId="analogInputs"/>
+			<channel-group id="fanModes3" typeId="fanModes3"/>
 			<channel-group id="comfoFond" typeId="comfoFond"/>
 			<channel-group id="comfoCool" typeId="comfoCool"/>
 			<channel-group id="airflowConstraints" typeId="airflowConstraints"/>
@@ -713,11 +739,13 @@
 		</channels>
 	</channel-group-type>
 
-	<channel-group-type id="operatingModes">
-		<label>Operating Modes</label>
+	<channel-group-type id="mainControl">
+		<label>Main Control</label>
 		<channels>
 			<channel id="operatingMode" typeId="operatingMode"/>
 			<channel id="manualMode" typeId="manualMode"/>
+			<channel id="bypassActivationState" typeId="bypassActivationState"/>
+			<channel id="bypassState" typeId="bypassState"/>
 		</channels>
 	</channel-group-type>
 
@@ -725,7 +753,6 @@
 		<label>Fan Modes</label>
 		<channels>
 			<channel id="fanSpeedMode" typeId="fanSpeedMode"/>
-			<channel id="bypassActivationState" typeId="bypassActivationState"/>
 			<channel id="profileTemperature" typeId="profileTemperature"/>
 			<channel id="supplyFanMode" typeId="supplyFanMode"/>
 			<channel id="exhaustFanMode" typeId="exhaustFanMode"/>
@@ -754,37 +781,36 @@
 		</channels>
 	</channel-group-type>
 
-	<channel-group-type id="powerUsage">
-		<label>Power Usage</label>
+	<channel-group-type id="power">
+		<label>Power</label>
 		<channels>
 			<channel id="powerUsage" typeId="powerUsage"/>
 			<channel id="powerUsageTotalYear" typeId="powerUsageTotalYear"/>
 			<channel id="powerUsageTotal" typeId="powerUsageTotal"/>
-		</channels>
-	</channel-group-type>
-
-	<channel-group-type id="preheaterPower">
-		<label>Preheater Power</label>
-		<channels>
 			<channel id="preheaterPower" typeId="preheaterPower"/>
 			<channel id="preheaterPowerTotalYear" typeId="preheaterPowerTotalYear"/>
 			<channel id="preheaterPowerTotal" typeId="preheaterPowerTotal"/>
 		</channels>
 	</channel-group-type>
 
-	<channel-group-type id="rfFilter">
-		<label>RF and Filter</label>
+	<channel-group-type id="maintenance">
+		<label>Maintenance</label>
 		<channels>
 			<channel id="rfPairingMode" typeId="rfPairingMode"/>
 			<channel id="daysToReplaceFilter" typeId="daysToReplaceFilter"/>
 		</channels>
 	</channel-group-type>
 
-	<channel-group-type id="unitTemperature">
-		<label>Unit Temperature</label>
+	<channel-group-type id="temperaturesComfoconnect">
+		<label>Temperature Values</label>
 		<channels>
 			<channel id="unitTemperature" typeId="unitTemperature"/>
 			<channel id="rmot" typeId="rmot"/>
+			<channel id="targetTemperature" typeId="targetTemperature"/>
+			<channel id="supplyAirTemperature" typeId="supplyAirTemperature"/>
+			<channel id="extractAirTemperature" typeId="extractAirTemperature"/>
+			<channel id="exhaustAirTemperature" typeId="exhaustAirTemperature"/>
+			<channel id="outdoorAirTemperature" typeId="outdoorAirTemperature"/>
 		</channels>
 	</channel-group-type>
 
@@ -793,13 +819,6 @@
 		<channels>
 			<channel id="seasonHeatingActive" typeId="seasonHeatingActive"/>
 			<channel id="seasonCoolingActive" typeId="seasonCoolingActive"/>
-		</channels>
-	</channel-group-type>
-
-	<channel-group-type id="targetTemperature">
-		<label>Target Temperature</label>
-		<channels>
-			<channel id="targetTemperature" typeId="targetTemperature"/>
 		</channels>
 	</channel-group-type>
 
@@ -819,18 +838,7 @@
 		<label>Fan Modulated and Bypass</label>
 		<channels>
 			<channel id="fanSpeedModeModulated" typeId="fanSpeedModeModulated"/>
-			<channel id="bypassState" typeId="bypassState"/>
 			<channel id="frostProtectionUnbalance" typeId="frostProtectionUnbalance"/>
-		</channels>
-	</channel-group-type>
-
-	<channel-group-type id="temperaturesComfoconnect">
-		<label>Temperature Values</label>
-		<channels>
-			<channel id="supplyAirTemperature" typeId="supplyAirTemperature"/>
-			<channel id="extractAirTemperature" typeId="extractAirTemperature"/>
-			<channel id="exhaustAirTemperature" typeId="exhaustAirTemperature"/>
-			<channel id="outdoorAirTemperature" typeId="outdoorAirTemperature"/>
 		</channels>
 	</channel-group-type>
 
@@ -907,39 +915,6 @@
 		<channels>
 			<channel id="comfoCoolState" typeId="comfoCoolState"/>
 			<channel id="comfoCoolCondensorTemp" typeId="comfoCoolCondensorTemp"/>
-		</channels>
-	</channel-group-type>
-
-	<channel-group-type id="airflowConstraints">
-		<label>Airflow Constraints</label>
-		<channels>
-			<channel id="airflowConstraintResistance" typeId="airflowConstraintResistance"/>
-			<channel id="airflowConstraintPreheaterNegative" typeId="airflowConstraintPreheaterNegative"/>
-			<channel id="airflowConstraintNoiseGuard" typeId="airflowConstraintNoiseGuard"/>
-			<channel id="airflowConstraintResistanceGuard" typeId="airflowConstraintResistanceGuard"/>
-			<channel id="airflowConstraintFrostProtection" typeId="airflowConstraintFrostProtection"/>
-			<channel id="airflowConstraintBypass" typeId="airflowConstraintBypass"/>
-			<channel id="airflowConstraintAnalogInput1" typeId="airflowConstraintAnalogInput1"/>
-			<channel id="airflowConstraintAnalogInput2" typeId="airflowConstraintAnalogInput2"/>
-			<channel id="airflowConstraintAnalogInput3" typeId="airflowConstraintAnalogInput3"/>
-			<channel id="airflowConstraintAnalogInput4" typeId="airflowConstraintAnalogInput4"/>
-			<channel id="airflowConstraintHood" typeId="airflowConstraintHood"/>
-			<channel id="airflowConstraintAnalogPreset" typeId="airflowConstraintAnalogPreset"/>
-			<channel id="airflowConstraintComfoCool" typeId="airflowConstraintComfoCool"/>
-			<channel id="airflowConstraintPreheaterPositive" typeId="airflowConstraintPreheaterPositive"/>
-			<channel id="airflowConstraintRfSensorFlowPreset" typeId="airflowConstraintRfSensorFlowPreset"/>
-			<channel id="airflowConstraintRfSensorFlowProportional" typeId="airflowConstraintRfSensorFlowProportional"/>
-			<channel id="airflowConstraintTemperatureComfort" typeId="airflowConstraintTemperatureComfort"/>
-			<channel id="airflowConstraintHumidityComfort" typeId="airflowConstraintHumidityComfort"/>
-			<channel id="airflowConstraintHumidityProtection" typeId="airflowConstraintHumidityProtection"/>
-			<channel id="airflowConstraintCo2Zone1" typeId="airflowConstraintCo2Zone1"/>
-			<channel id="airflowConstraintCo2Zone2" typeId="airflowConstraintCo2Zone2"/>
-			<channel id="airflowConstraintCo2Zone3" typeId="airflowConstraintCo2Zone3"/>
-			<channel id="airflowConstraintCo2Zone4" typeId="airflowConstraintCo2Zone4"/>
-			<channel id="airflowConstraintCo2Zone5" typeId="airflowConstraintCo2Zone5"/>
-			<channel id="airflowConstraintCo2Zone6" typeId="airflowConstraintCo2Zone6"/>
-			<channel id="airflowConstraintCo2Zone7" typeId="airflowConstraintCo2Zone7"/>
-			<channel id="airflowConstraintCo2Zone8" typeId="airflowConstraintCo2Zone8"/>
 		</channels>
 	</channel-group-type>
 
@@ -2482,31 +2457,6 @@
 		<state readOnly="true" pattern="%.1f %unit%"/>
 	</channel-type>
 
-	<!-- COMMENTED OUT - User doesn't own these sensors: cooker, heater, preheater -->
-	<!-- <channel-type id="cookerTemperature">
-		<item-type>Number:Temperature</item-type>
-		<label>Cooker Temperature</label>
-		<description>Cooker/kitchen temperature</description>
-		<category>Temperature</category>
-		<state readOnly="true" pattern="%.1f %unit%"/>
-		</channel-type>
-
-		<channel-type id="heaterTemperature">
-		<item-type>Number:Temperature</item-type>
-		<label>Heater Temperature</label>
-		<description>Heater temperature</description>
-		<category>Temperature</category>
-		<state readOnly="true" pattern="%.1f %unit%"/>
-		</channel-type>
-
-		<channel-type id="preHeaterTemperature">
-		<item-type>Number:Temperature</item-type>
-		<label>Pre Heater Temperature</label>
-		<description>Pre-heater temperature</description>
-		<category>Temperature</category>
-		<state readOnly="true" pattern="%.1f %unit%"/>
-		</channel-type> -->
-
 	<channel-type id="indoorHumidity">
 		<item-type>Number</item-type>
 		<label>Indoor Humidity</label>
@@ -2548,41 +2498,6 @@
 		<state readOnly="true" pattern="%.1f %%"/>
 	</channel-type>
 
-	<!-- COMMENTED OUT - User doesn't own comfosupply sensor -->
-	<!-- <channel-type id="comfoSupplyHumidity">
-		<item-type>Number:Dimensionless</item-type>
-		<label>ComfoSupply Humidity</label>
-		<description>ComfoSupply humidity level</description>
-		<category>Humidity</category>
-		<state readOnly="true" pattern="%d %%"/>
-		</channel-type> -->
-
-	<!-- COMMENTED OUT - User doesn't own these sensors: T1, T2, T3 sensor presence -->
-	<!-- Boolean sensors
-		<channel-type id="t1SensorPresent">
-		<item-type>Switch</item-type>
-		<label>T1 Sensor Present</label>
-		<description>T1 temperature sensor presence</description>
-		<category>Switch</category>
-		<state readOnly="true"/>
-		</channel-type>
-
-		<channel-type id="t2SensorPresent">
-		<item-type>Switch</item-type>
-		<label>T2 Sensor Present</label>
-		<description>T2 temperature sensor presence</description>
-		<category>Switch</category>
-		<state readOnly="true"/>
-		</channel-type>
-
-		<channel-type id="t3SensorPresent">
-		<item-type>Switch</item-type>
-		<label>T3 Sensor Present</label>
-		<description>T3 temperature sensor presence</description>
-		<category>Switch</category>
-		<state readOnly="true"/>
-		</channel-type> -->
-
 	<!-- Temperature unit mapping sensor -->
 	<channel-type id="temperatureUnit">
 		<item-type>String</item-type>
@@ -2619,30 +2534,6 @@
 		<item-type>Number</item-type>
 		<label>Changing Filters</label>
 		<description>Changing filters state</description>
-		<category>Number</category>
-		<state readOnly="true"/>
-	</channel-type>
-
-	<channel-type id="sensor33" advanced="true">
-		<item-type>Number</item-type>
-		<label>Sensor 33</label>
-		<description>Unknown sensor 33</description>
-		<category>Number</category>
-		<state readOnly="true"/>
-	</channel-type>
-
-	<channel-type id="sensor37" advanced="true">
-		<item-type>Number</item-type>
-		<label>Sensor 37</label>
-		<description>Unknown sensor 37</description>
-		<category>Number</category>
-		<state readOnly="true"/>
-	</channel-type>
-
-	<channel-type id="sensor53" advanced="true">
-		<item-type>Number</item-type>
-		<label>Sensor 53</label>
-		<description>Unknown sensor 53</description>
 		<category>Number</category>
 		<state readOnly="true"/>
 	</channel-type>
@@ -2757,14 +2648,6 @@
 		<label>Exhaust Fan Mode</label>
 		<description>Exhaust fan mode</description>
 		<category>fan</category>
-		<state readOnly="true"/>
-	</channel-type>
-
-	<channel-type id="sensor85" advanced="true">
-		<item-type>Number</item-type>
-		<label>Sensor 85</label>
-		<description>Unknown sensor 85</description>
-		<category>Number</category>
 		<state readOnly="true"/>
 	</channel-type>
 
@@ -2886,7 +2769,7 @@
 		<item-type>Number:Power</item-type>
 		<label>Power Usage</label>
 		<description>Current power usage</description>
-		<category>Power</category>
+		<category>Energy</category>
 		<state readOnly="true" pattern="%d W"/>
 	</channel-type>
 
@@ -2926,7 +2809,7 @@
 		<item-type>Number:Power</item-type>
 		<label>Preheater Power</label>
 		<description>Current preheater power usage</description>
-		<category>Power</category>
+		<category>Energy</category>
 		<state readOnly="true" pattern="%d W"/>
 	</channel-type>
 
@@ -2934,7 +2817,7 @@
 		<item-type>Number:Power</item-type>
 		<label>Avoided Heating</label>
 		<description>Avoided heating power usage</description>
-		<category>Power</category>
+		<category>Energy</category>
 		<state readOnly="true" pattern="%.0f W"/>
 	</channel-type>
 
@@ -2958,7 +2841,7 @@
 		<item-type>Number:Power</item-type>
 		<label>Avoided Cooling</label>
 		<description>Avoided cooling power usage</description>
-		<category>Power</category>
+		<category>Energy</category>
 		<state readOnly="true" pattern="%.0f W"/>
 	</channel-type>
 
@@ -2979,14 +2862,6 @@
 	</channel-type>
 
 	<!-- Phase 9: Temperature sensors -->
-	<channel-type id="sensor220" advanced="true">
-		<item-type>Number:Temperature</item-type>
-		<label>Sensor 220</label>
-		<description>Unknown temperature sensor 220</description>
-		<category>Temperature</category>
-		<state readOnly="true" pattern="%.1f %unit%"/>
-	</channel-type>
-
 	<channel-type id="supplyAirTemperature">
 		<item-type>Number:Temperature</item-type>
 		<label>Supply Air Temperature</label>
@@ -3015,22 +2890,6 @@
 		<item-type>Number:Temperature</item-type>
 		<label>Outdoor Air Temperature</label>
 		<description>Outdoor air temperature</description>
-		<category>Temperature</category>
-		<state readOnly="true" pattern="%.1f %unit%"/>
-	</channel-type>
-
-	<channel-type id="sensor277" advanced="true">
-		<item-type>Number:Temperature</item-type>
-		<label>Sensor 277</label>
-		<description>Unknown temperature sensor 277</description>
-		<category>Temperature</category>
-		<state readOnly="true" pattern="%.1f %unit%"/>
-	</channel-type>
-
-	<channel-type id="sensor278" advanced="true">
-		<item-type>Number:Temperature</item-type>
-		<label>Sensor 278</label>
-		<description>Unknown temperature sensor 278</description>
 		<category>Temperature</category>
 		<state readOnly="true" pattern="%.1f %unit%"/>
 	</channel-type>
@@ -3109,30 +2968,6 @@
 		<state readOnly="true"/>
 	</channel-type>
 
-	<channel-type id="sensor785" advanced="true">
-		<item-type>Switch</item-type>
-		<label>Sensor 785</label>
-		<description>Unknown sensor 785</description>
-		<category>Switch</category>
-		<state readOnly="true"/>
-	</channel-type>
-
-	<channel-type id="sensor386" advanced="true">
-		<item-type>Switch</item-type>
-		<label>Sensor 386</label>
-		<description>Unknown sensor 386</description>
-		<category>Switch</category>
-		<state readOnly="true"/>
-	</channel-type>
-
-	<channel-type id="sensor402" advanced="true">
-		<item-type>Switch</item-type>
-		<label>Sensor 402</label>
-		<description>Unknown sensor 402</description>
-		<category>Switch</category>
-		<state readOnly="true"/>
-	</channel-type>
-
 	<channel-type id="comfoFondGheState" advanced="true">
 		<item-type>Number:Dimensionless</item-type>
 		<label>ComfoFond GHE State</label>
@@ -3179,71 +3014,6 @@
 		<item-type>Number</item-type>
 		<label>ComfoCool State</label>
 		<description>ComfoCool state</description>
-		<category>Number</category>
-		<state readOnly="true"/>
-	</channel-type>
-
-	<!-- Phase 14: Miscellaneous sensors -->
-	<channel-type id="sensor219" advanced="true">
-		<item-type>Number</item-type>
-		<label>Sensor 219</label>
-		<description>Unknown sensor 219</description>
-		<category>Number</category>
-		<state readOnly="true"/>
-	</channel-type>
-
-	<channel-type id="sensor321" advanced="true">
-		<item-type>Number</item-type>
-		<label>Sensor 321</label>
-		<description>Unknown sensor 321</description>
-		<category>Number</category>
-		<state readOnly="true"/>
-	</channel-type>
-
-	<channel-type id="sensor325" advanced="true">
-		<item-type>Number</item-type>
-		<label>Sensor 325</label>
-		<description>Unknown sensor 325</description>
-		<category>Number</category>
-		<state readOnly="true"/>
-	</channel-type>
-
-	<channel-type id="sensor337" advanced="true">
-		<item-type>Number</item-type>
-		<label>Sensor 337</label>
-		<description>Unknown sensor 337</description>
-		<category>Number</category>
-		<state readOnly="true"/>
-	</channel-type>
-
-	<channel-type id="sensor341" advanced="true">
-		<item-type>Number</item-type>
-		<label>Sensor 341</label>
-		<description>Unknown sensor 341</description>
-		<category>Number</category>
-		<state readOnly="true"/>
-	</channel-type>
-
-	<channel-type id="sensor384" advanced="true">
-		<item-type>Number:Temperature</item-type>
-		<label>Sensor 384</label>
-		<description>Unknown temperature sensor 384</description>
-		<category>Temperature</category>
-		<state readOnly="true" pattern="%.1f %unit%"/>
-	</channel-type>
-
-	<channel-type id="sensor400" advanced="true">
-		<item-type>Number:Temperature</item-type>
-		<label>Sensor 400</label>
-		<description>Unknown temperature sensor 400</description>
-		<category>Temperature</category>
-		<state readOnly="true" pattern="%.1f %unit%"/>
-	</channel-type>
-
-	<channel-type id="sensor401" advanced="true">
-		<item-type>Number</item-type>
-		<label>Sensor 401</label>
-		<description>Unknown sensor 401</description>
 		<category>Number</category>
 		<state readOnly="true"/>
 	</channel-type>
