@@ -47,8 +47,9 @@ public class DecimalSensor extends Sensor {
         double rawValue = extractValueFrom(payload);
         double transformedValue = transformation.transform(rawValue);
 
-        logger.info("Sensor {}: raw={}, transformed={}, payload_hex={}", name, rawValue, transformedValue,
+        logger.debug("Sensor {}: raw={}, transformed={}, payload_hex={}", name, rawValue, transformedValue,
                 bytesToHex(payload));
+
         return new DecimalType(transformedValue);
     }
 

@@ -1793,7 +1793,7 @@
 		<label>Supply Fan Speed</label>
 		<description>Supply fan speed mode (0=Away, 1=Low, 2=Medium, 3=High)</description>
 		<category>fan</category>
-		<state readOnly="true" pattern="%d"/>
+		<state readOnly="true" pattern="%.0f rpm"/>
 	</channel-type>
 
 	<channel-type id="exhaustFanSpeed">
@@ -1801,7 +1801,7 @@
 		<label>Exhaust Fan Speed</label>
 		<description>Exhaust fan speed mode (0=Away, 1=Low, 2=Medium, 3=High)</description>
 		<category>fan</category>
-		<state readOnly="true" pattern="%d"/>
+		<state readOnly="true" pattern="%.0f rpm"/>
 	</channel-type>
 
 	<channel-type id="supplyFanSpeedSet">
