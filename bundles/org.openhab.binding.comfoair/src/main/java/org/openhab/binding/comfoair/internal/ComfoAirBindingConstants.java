@@ -196,6 +196,9 @@ public class ComfoAirBindingConstants {
     public static final String CHANNEL_FROST_STATE = "frostState";
     public static final String CHANNEL_COOKERHOOD_STATE = "cookerhoodState";
     public static final String CHANNEL_ENTHALPY_STATE = "enthalpyState";
+    // Operating mode channels
+    public static final String CHANNEL_OPERATING_MODE = "operatingMode";
+    public static final String CHANNEL_MANUAL_MODE = "manualMode";
     // Inputs channels
     public static final String CHANNEL_IS_L1_SWITCH = "isL1Switch";
     public static final String CHANNEL_IS_L2_SWITCH = "isL2Switch";

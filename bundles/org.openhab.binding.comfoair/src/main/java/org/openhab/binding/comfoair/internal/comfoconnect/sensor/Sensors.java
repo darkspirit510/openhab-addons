@@ -15,12 +15,14 @@ package org.openhab.binding.comfoair.internal.comfoconnect.sensor;
 import static org.openhab.binding.comfoair.internal.comfoconnect.sensor.SensorValueType.TYPE_CN_BOOL;
 import static org.openhab.binding.comfoair.internal.comfoconnect.sensor.SensorValueType.TYPE_CN_INT16;
 import static org.openhab.binding.comfoair.internal.comfoconnect.sensor.SensorValueType.TYPE_CN_INT64;
+import static org.openhab.binding.comfoair.internal.comfoconnect.sensor.SensorValueType.TYPE_CN_INT8;
 import static org.openhab.binding.comfoair.internal.comfoconnect.sensor.SensorValueType.TYPE_CN_UINT16;
 import static org.openhab.binding.comfoair.internal.comfoconnect.sensor.SensorValueType.TYPE_CN_UINT32;
 import static org.openhab.binding.comfoair.internal.comfoconnect.sensor.SensorValueType.TYPE_CN_UINT8;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
@@ -39,6 +41,12 @@ import org.slf4j.LoggerFactory;
 public class Sensors {
 
     private static final Logger logger = LoggerFactory.getLogger(Sensors.class);
+
+    // Operating mode value mappings based on PROTOCOL-PDO.md
+    private static final Map<Integer, String> OPERATING_MODE_MAP = Map.of(-1, "auto", 1, "limited_manual", 5,
+            "unlimited_manual", 6, "boost", 11, "away");
+
+    private static final Map<Integer, String> MANUAL_MODE_MAP = Map.of(-1, "auto", 1, "unlimited_manual");
 
     /**
      * Find the sensor definition for a given channel.
@@ -88,8 +96,10 @@ public class Sensors {
         sensors.add(new DecimalSensor("Changing filters", 18, TYPE_CN_UINT8, "changingFilters"));
 
         // Operating mode sensors
-        sensors.add(new DecimalSensor("Operating Mode", 49, TYPE_CN_UINT8, "operatingMode2"));
-        sensors.add(new DecimalSensor("Operating Mode", 56, TYPE_CN_UINT8, "operatingMode"));
+        sensors.add(new StringSensor("Operating Mode", 49, TYPE_CN_INT8, "operatingMode")
+                .withTransformation(value -> OPERATING_MODE_MAP.getOrDefault(value.intValue(), "unknown")));
+        sensors.add(new StringSensor("Manual Mode", 56, TYPE_CN_INT8, "manualMode")
+                .withTransformation(value -> MANUAL_MODE_MAP.getOrDefault(value.intValue(), "unknown")));
 
         // Fan speed and mode sensors
         sensors.add(new DecimalSensor("Fan Speed", 65, TYPE_CN_UINT8, "fanSpeedMode"));

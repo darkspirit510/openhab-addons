@@ -89,8 +89,8 @@
 		<channels>
 			<channel id="deviceState" typeId="deviceState"/>
 			<channel id="changingFilters" typeId="changingFilters"/>
-			<channel id="operatingMode2" typeId="operatingMode2"/>
 			<channel id="operatingMode" typeId="operatingMode"/>
+			<channel id="manualMode" typeId="manualMode"/>
 			<channel id="fanSpeedMode" typeId="fanSpeedMode"/>
 			<channel id="bypassActivationState" typeId="bypassActivationState"/>
 			<channel id="profileTemperature" typeId="profileTemperature"/>
@@ -1778,12 +1778,27 @@
 	<channel-type id="operatingMode">
 		<item-type>String</item-type>
 		<label>Operating Mode</label>
-		<description>Current operating mode</description>
+		<description>Current ventilation operating mode</description>
 		<category>fan</category>
-		<state readOnly="false">
+		<state readOnly="true">
 			<options>
 				<option value="auto">Auto</option>
-				<option value="manual">Manual</option>
+				<option value="limited_manual">Limited Manual</option>
+				<option value="unlimited_manual">Unlimited Manual</option>
+				<option value="boost">Boost</option>
+				<option value="away">Away</option>
+			</options>
+		</state>
+	</channel-type>
+	<channel-type id="manualMode">
+		<item-type>String</item-type>
+		<label>Manual Mode</label>
+		<description>Manual mode state</description>
+		<category>fan</category>
+		<state readOnly="true">
+			<options>
+				<option value="auto">Auto</option>
+				<option value="unlimited_manual">Unlimited Manual</option>
 			</options>
 		</state>
 	</channel-type>
@@ -2153,14 +2168,6 @@
 		<item-type>Number</item-type>
 		<label>Changing Filters</label>
 		<description>Changing filters state</description>
-		<category>Number</category>
-		<state readOnly="true"/>
-	</channel-type>
-
-	<channel-type id="operatingMode2" advanced="true">
-		<item-type>Number</item-type>
-		<label>Operating Mode 2</label>
-		<description>Operating mode (alternative)</description>
 		<category>Number</category>
 		<state readOnly="true"/>
 	</channel-type>
