@@ -18,7 +18,9 @@ import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.SocketTimeoutException;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Future;
@@ -29,8 +31,10 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.comfoair.internal.ComfoAirBindingConstants;
 import org.openhab.binding.comfoair.internal.comfoconnect.response.SearchGatewayResponse;
+import org.openhab.binding.comfoair.internal.comfoconnect.sensor.BitmaskSensor;
 import org.openhab.binding.comfoair.internal.comfoconnect.sensor.Sensor;
 import org.openhab.binding.comfoair.internal.comfoconnect.sensor.Sensors;
+import org.openhab.core.library.types.DecimalType;
 import org.openhab.core.thing.Channel;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
@@ -350,6 +354,23 @@ public class ComfoConnectHandler extends BaseThingHandler {
 
         logger.debug("handleSensorData called: sensor={}", sensor);
 
+        // Special handling for BitmaskSensor
+        if (sensor instanceof BitmaskSensor bitmaskSensor) {
+            State state = sensor.valueAsState(message);
+            if (state instanceof DecimalType decimalState) {
+                long bitmask = decimalState.longValue();
+                // Process the bitmask and get states for all linked channels
+                Map<String, State> channelStates = bitmaskSensor.processBitmaskUpdate(bitmask);
+
+                // Update each channel with its corresponding state
+                for (Map.Entry<String, State> entry : channelStates.entrySet()) {
+                    updateChannelState(entry.getKey(), entry.getValue());
+                }
+            }
+            return;
+        }
+
+        // Normal sensor handling
         State state = sensor.valueAsState(message);
 
         if (state != null) {
@@ -519,14 +540,21 @@ public class ComfoConnectHandler extends BaseThingHandler {
         // Find the sensor for this channel
         getThing().getChannels().stream().filter(channel -> channel.getUID().getId().equals(channelId)).findFirst()
                 .ifPresentOrElse(channel -> {
-                    Sensors.sensorForChannel(channel).ifPresentOrElse(sensor -> {
+                    // Special handling for BitmaskSensor - find it directly without linking
+                    Optional<Sensor> sensorOpt = findSensorForChannel(channel);
+                    sensorOpt.ifPresentOrElse(sensor -> {
                         logger.debug("Channel {} unlinked, checking if sensor {} still has other linked channels",
                                 channelId, sensor);
+
+                        // For BitmaskSensor, unlink the channel from the sensor
+                        if (sensor instanceof BitmaskSensor bitmaskSensor) {
+                            bitmaskSensor.unlinkChannel(channel);
+                        }
 
                         // Check if any other channels for this sensor are still linked
                         boolean stillHasLinkedChannels = getThing().getChannels().stream()
                                 .filter(ch -> isLinked(ch.getUID()))
-                                .anyMatch(ch -> Sensors.sensorForChannel(ch).map(s -> s.id == sensor.id).orElse(false));
+                                .anyMatch(ch -> findSensorForChannel(ch).map(s -> s.id == sensor.id).orElse(false));
 
                         if (!stillHasLinkedChannels) {
                             // No more channels use this sensor, unsubscribe from it
@@ -544,6 +572,29 @@ public class ComfoConnectHandler extends BaseThingHandler {
                         }
                     }, () -> logger.debug("Channel {} unlinked but no sensor mapping found", channelId));
                 }, () -> logger.debug("Channel {} unlinked but channel not found", channelId));
+    }
+
+    /**
+     * Find the sensor for a channel without linking it.
+     * This is used during unlinking to avoid re-linking the channel.
+     *
+     * @param channel the channel to find the sensor for
+     * @return the sensor, or empty if not found
+     */
+    private Optional<Sensor> findSensorForChannel(Channel channel) {
+        String id = channel.getUID().getId();
+
+        // First, try direct match
+        Optional<Sensor> directMatch = Sensors.knownSensors.stream().filter(s -> id.equals(s.channelId)).findFirst();
+
+        if (directMatch.isPresent()) {
+            return directMatch;
+        }
+
+        // Check if this channel belongs to a BitmaskSensor
+        return Sensors.knownSensors.stream().filter(s -> s instanceof BitmaskSensor).map(s -> (BitmaskSensor) s)
+                .filter(bitmaskSensor -> bitmaskSensor.getBitsForChannel(id) != null).findFirst()
+                .map(bitmaskSensor -> (Sensor) bitmaskSensor);
     }
 
     /**

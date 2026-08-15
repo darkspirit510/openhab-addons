@@ -21,6 +21,7 @@ import static org.openhab.binding.comfoair.internal.comfoconnect.sensor.SensorVa
 import static org.openhab.binding.comfoair.internal.comfoconnect.sensor.SensorValueType.TYPE_CN_UINT8;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -56,7 +57,21 @@ public class Sensors {
      */
     public static Optional<Sensor> sensorForChannel(final Channel channel) {
         String id = channel.getUID().getId();
-        return knownSensors.stream().filter(s -> id.equals(s.channelId)).findFirst().map(s -> s.linkChannel(channel));
+
+        // First, try direct match
+        Optional<Sensor> directMatch = knownSensors.stream().filter(s -> id.equals(s.channelId)).findFirst()
+                .map(s -> s.linkChannel(channel));
+
+        if (directMatch.isPresent()) {
+            return directMatch;
+        }
+
+        // Check if this channel belongs to a BitmaskSensor
+        return knownSensors.stream().filter(s -> s instanceof BitmaskSensor).map(s -> (BitmaskSensor) s)
+                .filter(bitmaskSensor -> bitmaskSensor.getBitsForChannel(id) != null).findFirst().map(bitmaskSensor -> {
+                    bitmaskSensor.linkChannel(channel);
+                    return (Sensor) bitmaskSensor;
+                });
     }
 
     /**
@@ -171,8 +186,41 @@ public class Sensors {
         sensors.add(new DecimalSensor("Bypass State", 227, TYPE_CN_UINT8, "bypassState"));
         sensors.add(new DecimalSensor("frostprotection_unbalance", 228, TYPE_CN_UINT8, "frostProtectionUnbalance"));
 
-        // Airflow constraints
-        sensors.add(new DecimalSensor("Airflow constraints", 230, TYPE_CN_INT64, "airflowConstraints"));
+        // Airflow constraints - bitmask sensor with individual boolean channels
+        Map<String, int[]> airflowConstraintBits = new HashMap<>();
+        // Multi-bit constraints (OR logic)
+        airflowConstraintBits.put("airflowConstraintResistance", new int[] { 2, 3 });
+        airflowConstraintBits.put("airflowConstraintNoiseGuard", new int[] { 5, 7 });
+        airflowConstraintBits.put("airflowConstraintResistanceGuard", new int[] { 6, 8 });
+        // Single-bit constraints
+        airflowConstraintBits.put("airflowConstraintPreheaterNegative", new int[] { 4 });
+        airflowConstraintBits.put("airflowConstraintFrostProtection", new int[] { 9 });
+        airflowConstraintBits.put("airflowConstraintBypass", new int[] { 10 });
+        airflowConstraintBits.put("airflowConstraintAnalogInput1", new int[] { 12 });
+        airflowConstraintBits.put("airflowConstraintAnalogInput2", new int[] { 13 });
+        airflowConstraintBits.put("airflowConstraintAnalogInput3", new int[] { 14 });
+        airflowConstraintBits.put("airflowConstraintAnalogInput4", new int[] { 15 });
+        airflowConstraintBits.put("airflowConstraintHood", new int[] { 16 });
+        airflowConstraintBits.put("airflowConstraintAnalogPreset", new int[] { 18 });
+        airflowConstraintBits.put("airflowConstraintComfoCool", new int[] { 19 });
+        airflowConstraintBits.put("airflowConstraintPreheaterPositive", new int[] { 22 });
+        airflowConstraintBits.put("airflowConstraintRfSensorFlowPreset", new int[] { 23 });
+        airflowConstraintBits.put("airflowConstraintRfSensorFlowProportional", new int[] { 24 });
+        airflowConstraintBits.put("airflowConstraintTemperatureComfort", new int[] { 25 });
+        airflowConstraintBits.put("airflowConstraintHumidityComfort", new int[] { 26 });
+        airflowConstraintBits.put("airflowConstraintHumidityProtection", new int[] { 27 });
+        // CO2 zones
+        airflowConstraintBits.put("airflowConstraintCo2Zone1", new int[] { 47 });
+        airflowConstraintBits.put("airflowConstraintCo2Zone2", new int[] { 48 });
+        airflowConstraintBits.put("airflowConstraintCo2Zone3", new int[] { 49 });
+        airflowConstraintBits.put("airflowConstraintCo2Zone4", new int[] { 50 });
+        airflowConstraintBits.put("airflowConstraintCo2Zone5", new int[] { 51 });
+        airflowConstraintBits.put("airflowConstraintCo2Zone6", new int[] { 52 });
+        airflowConstraintBits.put("airflowConstraintCo2Zone7", new int[] { 53 });
+        airflowConstraintBits.put("airflowConstraintCo2Zone8", new int[] { 54 });
+
+        sensors.add(new BitmaskSensor("Airflow constraints", 230, TYPE_CN_INT64, "airflowConstraints",
+                airflowConstraintBits));
 
         // Temperature sensors
         sensors.add(new DecimalSensor("Supply Air Temperature", 221, TYPE_CN_INT16, "supplyAirTemperature")
