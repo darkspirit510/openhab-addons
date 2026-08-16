@@ -372,24 +372,17 @@
 		<semantic-equipment-tag>HVAC</semantic-equipment-tag>
 
 		<channel-groups>
-			<channel-group id="deviceState" typeId="deviceStateGroup"/>
 			<channel-group id="mainControl" typeId="mainControl"/>
-			<channel-group id="fanModes" typeId="fanModes"/>
-			<channel-group id="fanNextChanges" typeId="fanNextChanges"/>
-			<channel-group id="fanModes2" typeId="fanModes2"/>
-			<channel-group id="fanDutyFlow" typeId="fanDutyFlow"/>
+			<channel-group id="fans" typeId="fans"/>
 			<channel-group id="power" typeId="power"/>
 			<channel-group id="maintenance" typeId="maintenance"/>
 			<channel-group id="temperatures" typeId="temperaturesComfoconnect"/>
-			<channel-group id="seasons" typeId="seasons"/>
 			<channel-group id="avoidedEnergy" typeId="avoidedEnergy"/>
-			<channel-group id="fanModulatedBypass" typeId="fanModulatedBypass"/>
 			<channel-group id="unitAirflow" typeId="unitAirflow"/>
 			<channel-group id="comfortControl" typeId="comfortControl"/>
 			<channel-group id="humidity" typeId="humidity"/>
 			<channel-group id="bypassOverride" typeId="bypassOverride"/>
 			<channel-group id="analogInputs" typeId="analogInputs"/>
-			<channel-group id="fanModes3" typeId="fanModes3"/>
 			<channel-group id="comfoFond" typeId="comfoFond"/>
 			<channel-group id="comfoCool" typeId="comfoCool"/>
 			<channel-group id="airflowConstraints" typeId="airflowConstraints"/>
@@ -731,14 +724,6 @@
 	</channel-group-type>
 
 	<!-- Channel group types for comfoconnect-lan -->
-	<channel-group-type id="deviceStateGroup">
-		<label>Device State</label>
-		<channels>
-			<channel id="deviceState" typeId="deviceState"/>
-			<channel id="changingFilters" typeId="changingFilters"/>
-		</channels>
-	</channel-group-type>
-
 	<channel-group-type id="mainControl">
 		<label>Main Control</label>
 		<channels>
@@ -746,32 +731,28 @@
 			<channel id="manualMode" typeId="manualMode"/>
 			<channel id="bypassActivationState" typeId="bypassActivationState"/>
 			<channel id="bypassState" typeId="bypassState"/>
+			<channel id="seasonHeatingActive" typeId="seasonHeatingActive"/>
+			<channel id="seasonCoolingActive" typeId="seasonCoolingActive"/>
 		</channels>
 	</channel-group-type>
 
-	<channel-group-type id="fanModes">
-		<label>Fan Modes</label>
+	<channel-group-type id="fans">
+		<label>Fans</label>
 		<channels>
 			<channel id="fanSpeedMode" typeId="fanSpeedMode"/>
 			<channel id="profileTemperature" typeId="profileTemperature"/>
 			<channel id="supplyFanMode" typeId="supplyFanMode"/>
 			<channel id="exhaustFanMode" typeId="exhaustFanMode"/>
-		</channels>
-	</channel-group-type>
-
-	<channel-group-type id="fanNextChanges">
-		<label>Fan Next Changes</label>
-		<channels>
 			<channel id="nextChangeFan" typeId="nextChangeFan"/>
 			<channel id="nextChangeBypass" typeId="nextChangeBypass"/>
 			<channel id="supplyFanNextChange" typeId="supplyFanNextChange"/>
 			<channel id="exhaustFanNextChange" typeId="exhaustFanNextChange"/>
-		</channels>
-	</channel-group-type>
-
-	<channel-group-type id="fanDutyFlow">
-		<label>Fan Duty and Flow</label>
-		<channels>
+			<channel id="supplyFanMode2" typeId="supplyFanMode2"/>
+			<channel id="exhaustFanMode2" typeId="exhaustFanMode2"/>
+			<channel id="fanSpeedModeModulated" typeId="fanSpeedModeModulated"/>
+			<channel id="frostProtectionUnbalance" typeId="frostProtectionUnbalance"/>
+			<channel id="supplyFanMode3" typeId="supplyFanMode3"/>
+			<channel id="exhaustFanMode3" typeId="exhaustFanMode3"/>
 			<channel id="exhaustFanDuty" typeId="exhaustFanDuty"/>
 			<channel id="supplyFanDuty" typeId="supplyFanDuty"/>
 			<channel id="exhaustFanFlow" typeId="exhaustFanFlow"/>
@@ -796,6 +777,8 @@
 	<channel-group-type id="maintenance">
 		<label>Maintenance</label>
 		<channels>
+			<channel id="deviceState" typeId="deviceState"/>
+			<channel id="changingFilters" typeId="changingFilters"/>
 			<channel id="rfPairingMode" typeId="rfPairingMode"/>
 			<channel id="daysToReplaceFilter" typeId="daysToReplaceFilter"/>
 		</channels>
@@ -814,14 +797,6 @@
 		</channels>
 	</channel-group-type>
 
-	<channel-group-type id="seasons">
-		<label>Seasons</label>
-		<channels>
-			<channel id="seasonHeatingActive" typeId="seasonHeatingActive"/>
-			<channel id="seasonCoolingActive" typeId="seasonCoolingActive"/>
-		</channels>
-	</channel-group-type>
-
 	<channel-group-type id="avoidedEnergy">
 		<label>Avoided Energy</label>
 		<channels>
@@ -831,14 +806,6 @@
 			<channel id="avoidedCooling" typeId="avoidedCooling"/>
 			<channel id="avoidedCoolingTotalYear" typeId="avoidedCoolingTotalYear"/>
 			<channel id="avoidedCoolingTotal" typeId="avoidedCoolingTotal"/>
-		</channels>
-	</channel-group-type>
-
-	<channel-group-type id="fanModulatedBypass">
-		<label>Fan Modulated and Bypass</label>
-		<channels>
-			<channel id="fanSpeedModeModulated" typeId="fanSpeedModeModulated"/>
-			<channel id="frostProtectionUnbalance" typeId="frostProtectionUnbalance"/>
 		</channels>
 	</channel-group-type>
 
@@ -857,7 +824,7 @@
 	</channel-group-type>
 
 	<channel-group-type id="humidity">
-		<label>Humidity Values</label>
+		<label>Humidity</label>
 		<channels>
 			<channel id="extractAirHumidity" typeId="extractAirHumidity"/>
 			<channel id="exhaustAirHumidity" typeId="exhaustAirHumidity"/>
@@ -871,22 +838,6 @@
 		<label>Bypass Override</label>
 		<channels>
 			<channel id="bypassOverride" typeId="bypassOverride"/>
-		</channels>
-	</channel-group-type>
-
-	<channel-group-type id="fanModes2">
-		<label>Fan Modes 2</label>
-		<channels>
-			<channel id="supplyFanMode2" typeId="supplyFanMode2"/>
-			<channel id="exhaustFanMode2" typeId="exhaustFanMode2"/>
-		</channels>
-	</channel-group-type>
-
-	<channel-group-type id="fanModes3">
-		<label>Fan Modes 3</label>
-		<channels>
-			<channel id="supplyFanMode3" typeId="supplyFanMode3"/>
-			<channel id="exhaustFanMode3" typeId="exhaustFanMode3"/>
 		</channels>
 	</channel-group-type>
 
