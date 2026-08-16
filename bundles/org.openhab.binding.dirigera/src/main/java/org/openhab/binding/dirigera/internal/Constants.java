@@ -27,6 +27,7 @@ import org.openhab.core.thing.ThingTypeUID;
  * used across the whole binding.
  *
  * @author Bernd Weymann - Initial contribution
+ * @author Bernd Weymann - add device set handling
  */
 @NonNullByDefault
 public class Constants {
@@ -59,11 +60,13 @@ public class Constants {
     public static final ThingTypeUID THING_TYPE_AIR_QUALITY = new ThingTypeUID(BINDING_ID, "air-quality");
     public static final ThingTypeUID THING_TYPE_WATER_SENSOR = new ThingTypeUID(BINDING_ID, "water-sensor");
     public static final ThingTypeUID THING_TYPE_BLIND = new ThingTypeUID(BINDING_ID, "blind");
+    public static final ThingTypeUID THING_TYPE_LIGHT_SET = new ThingTypeUID(BINDING_ID, "light-set");
     public static final ThingTypeUID THING_TYPE_UNKNOWN = new ThingTypeUID(BINDING_ID, "unknown");
     public static final ThingTypeUID THING_TYPE_NOT_FOUND = new ThingTypeUID(BINDING_ID, "not-found");
     public static final ThingTypeUID THING_TYPE_IGNORE = new ThingTypeUID(BINDING_ID, "ignore");
 
     // Generic Thing Type UIDs which will be configured via devices.json
+    public static final ThingTypeUID THING_TYPE_MATTER_OUTLET = new ThingTypeUID(BINDING_ID, "matter-outlet");
     public static final ThingTypeUID THING_TYPE_MATTER_OCCUPANCY_SENSOR = new ThingTypeUID(BINDING_ID,
             "occupancy-sensor");
     public static final ThingTypeUID THING_TYPE_MATTER_LIGHT_SENSOR = new ThingTypeUID(BINDING_ID, "light-sensor");
@@ -89,7 +92,8 @@ public class Constants {
             THING_TYPE_AIR_PURIFIER, THING_TYPE_WATER_SENSOR, THING_TYPE_BLIND, THING_TYPE_SWITCH_LIGHT,
             THING_TYPE_MATTER_OCCUPANCY_SENSOR, THING_TYPE_MATTER_LIGHT_SENSOR, THING_TYPE_MATTER_ENVIRONMENT_SENSOR,
             THING_TYPE_MATTER_OPEN_CLOSE_SENSOR, THING_TYPE_MATTER_WATER_LEAK_SENSOR,
-            THING_TYPE_MATTER_2_BUTTON_CONTROLLER, THING_TYPE_MATTER_3_BUTTON_CONTROLLER, THING_TYPE_MATTER_LIGHT);
+            THING_TYPE_MATTER_2_BUTTON_CONTROLLER, THING_TYPE_MATTER_3_BUTTON_CONTROLLER, THING_TYPE_MATTER_LIGHT,
+            THING_TYPE_MATTER_OUTLET, THING_TYPE_LIGHT_SET);
 
     // Thing types to be ignored for discovery
     public static final Set<ThingTypeUID> IGNORE_THING_TYPES_UIDS = Set.of(THING_TYPE_IGNORE, THING_TYPE_MATTER_UNKNOWN,
@@ -104,6 +108,7 @@ public class Constants {
     public static final String TOKEN_URL = BASE_URL + "/oauth/token";
     public static final String HOME_URL = BASE_URL + "/home";
     public static final String DEVICE_URL = BASE_URL + "/devices/%s";
+    public static final String DEVICE_SET_URL = BASE_URL + "/devices/set/%s";
     public static final String SCENE_URL = BASE_URL + "/scenes/%s";
     public static final String SCENES_URL = BASE_URL + "/scenes";
 
@@ -261,6 +266,11 @@ public class Constants {
             ATTRIBUTES_KEY_POWER_STATE, CHANNEL_POWER_STATE, "lightLevel", CHANNEL_LIGHT_BRIGHTNESS, "colorHue",
             CHANNEL_LIGHT_COLOR, "colorSaturation", CHANNEL_LIGHT_COLOR, "colorTemperature", CHANNEL_LIGHT_TEMPERATURE,
             ATTRIBUTES_KEY_STARTUP_BEHAVIOR, CHANNEL_STARTUP_BEHAVIOR);;
+
+    public static final Map<String, String> LIGHT_SET_MAP = Map.of(ATTRIBUTES_KEY_CUSTOM_NAME, CHANNEL_CUSTOM_NAME,
+            ATTRIBUTES_KEY_POWER_STATE, CHANNEL_POWER_STATE, "lightLevel", CHANNEL_LIGHT_BRIGHTNESS, "colorHue",
+            CHANNEL_LIGHT_COLOR, "colorSaturation", CHANNEL_LIGHT_COLOR, "colorTemperature", CHANNEL_LIGHT_TEMPERATURE,
+            ATTRIBUTES_KEY_STARTUP_BEHAVIOR, CHANNEL_STARTUP_BEHAVIOR);
 
     public static final Map<String, String> CONTACT_SENSOR_MAP = Map.of(ATTRIBUTES_KEY_CUSTOM_NAME, CHANNEL_CUSTOM_NAME,
             "batteryPercentage", CHANNEL_BATTERY_LEVEL, "isOpen", CHANNEL_CONTACT);

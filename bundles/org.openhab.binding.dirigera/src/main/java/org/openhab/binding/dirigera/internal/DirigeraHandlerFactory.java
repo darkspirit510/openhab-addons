@@ -30,11 +30,13 @@ import org.openhab.binding.dirigera.internal.handler.controller.ShortcutControll
 import org.openhab.binding.dirigera.internal.handler.controller.SoundControllerHandler;
 import org.openhab.binding.dirigera.internal.handler.light.ColorLightHandler;
 import org.openhab.binding.dirigera.internal.handler.light.DimmableLightHandler;
+import org.openhab.binding.dirigera.internal.handler.light.LightSetHandler;
 import org.openhab.binding.dirigera.internal.handler.light.SwitchLightHandler;
 import org.openhab.binding.dirigera.internal.handler.light.TemperatureLightHandler;
 import org.openhab.binding.dirigera.internal.handler.matter.Matter2ButtonController;
 import org.openhab.binding.dirigera.internal.handler.matter.Matter3ButtonController;
 import org.openhab.binding.dirigera.internal.handler.matter.MatterLight;
+import org.openhab.binding.dirigera.internal.handler.matter.MatterOutlet;
 import org.openhab.binding.dirigera.internal.handler.matter.MatterSensor;
 import org.openhab.binding.dirigera.internal.handler.plug.PowerPlugHandler;
 import org.openhab.binding.dirigera.internal.handler.plug.SimplePlugHandler;
@@ -69,6 +71,7 @@ import org.slf4j.LoggerFactory;
  * handlers.
  *
  * @author Bernd Weymann - Initial contribution
+ * @author Bernd Weymann - add device set handling
  */
 @NonNullByDefault
 @Component(configurationPid = "binding.dirigera", service = ThingHandlerFactory.class)
@@ -180,12 +183,16 @@ public class DirigeraHandlerFactory extends BaseThingHandlerFactory {
                 || THING_TYPE_MATTER_OPEN_CLOSE_SENSOR.equals(thingTypeUID)
                 || THING_TYPE_MATTER_WATER_LEAK_SENSOR.equals(thingTypeUID)) {
             return new MatterSensor(thing);
+        } else if (THING_TYPE_MATTER_OUTLET.equals(thingTypeUID)) {
+            return new MatterOutlet(thing);
         } else if (THING_TYPE_MATTER_2_BUTTON_CONTROLLER.equals(thingTypeUID)) {
             return new Matter2ButtonController(thing);
         } else if (THING_TYPE_MATTER_3_BUTTON_CONTROLLER.equals(thingTypeUID)) {
             return new Matter3ButtonController(thing);
         } else if (THING_TYPE_MATTER_LIGHT.equals(thingTypeUID)) {
             return new MatterLight(thing, COLOR_LIGHT_MAP, stateProvider);
+        } else if (THING_TYPE_LIGHT_SET.equals(thingTypeUID)) {
+            return new LightSetHandler(thing, LIGHT_SET_MAP, stateProvider);
         } else {
             logger.debug("DIRIGERA FACTORY Request for {} doesn't match {}", thingTypeUID, THING_TYPE_GATEWAY);
             return null;

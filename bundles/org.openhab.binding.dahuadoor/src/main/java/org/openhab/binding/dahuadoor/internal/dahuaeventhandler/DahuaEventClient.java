@@ -16,13 +16,18 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.ConnectException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
+import java.security.KeyManagementException;
+import java.security.KeyStore;
+import java.security.KeyStoreException;
 import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -31,13 +36,22 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.function.Consumer;
 
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSocket;
+import javax.net.ssl.SSLSocketFactory;
+import javax.net.ssl.TrustManagerFactory;
+
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
+import org.bouncycastle.jsse.provider.BouncyCastleJsseProvider;
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
+import org.eclipse.jetty.http.HttpStatus;
 import org.openhab.core.common.ThreadPoolManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
 /**
@@ -69,18 +83,26 @@ public class DahuaEventClient implements Runnable {
     private Consumer<String> errorInformer;
     private ByteBuffer residualBuffer = ByteBuffer.allocate(0); // Buffer for incomplete frames across reads
 
-    private static final int HTTP_TIMEOUT_SECONDS = 10;
+    private static final int HTTP_TIMEOUT_MS = 750;
     private static final String SNAPSHOT_PATH = "/cgi-bin/snapshot.cgi";
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+    private static final SSLSocketFactory BC_SSL_SOCKET_FACTORY = buildBcSslSocketFactory();
+    private static final String[] DOWNLOAD_LENGTH_FIELDS = { "length", "fileLength", "fileSize", "size", "totalLength",
+            "totalSize", "dataLen", "dataSize" };
 
-    public DahuaEventClient(String host, String username, String password, DHIPEventListener eventListener,
-            Consumer<String> errorInformer) {
+    /** Whether to use HTTPS (port 443) or HTTP (port 80) for snapshot and door-open requests. */
+    private final boolean httpsAvailable;
+
+    public DahuaEventClient(String host, String username, String password, boolean useHttps,
+            DHIPEventListener eventListener, Consumer<String> errorInformer) {
         this.host = host;
         this.username = username;
         this.password = password;
         this.eventListener = eventListener;
         this.errorInformer = errorInformer;
         this.execThread = true;
+        this.httpsAvailable = useHttps;
+        logger.debug("HTTPS {} for {}", useHttps ? "enabled" : "disabled", host);
         ThreadPoolManager.getPool("binding.dahuadoor").submit(this);
     }
 
@@ -103,27 +125,12 @@ public class DahuaEventClient implements Runnable {
      * @return JPEG image bytes, or null if the request failed
      */
     public byte @Nullable [] requestImage() {
+        logger.debug("Requesting snapshot from {}", host);
         try {
-            SnapshotHttpResponse response = sendSnapshotRequest(null);
-            if (response.statusCode == 200) {
-                return response.body;
-            }
-            if (response.statusCode == 401) {
-                String challenge = response.headers.get("www-authenticate");
-                if (challenge != null) {
-                    String digestHeader = createDigestAuthorizationHeader(challenge, SNAPSHOT_PATH);
-                    if (digestHeader != null) {
-                        SnapshotHttpResponse authResponse = sendSnapshotRequest(digestHeader);
-                        if (authResponse.statusCode == 200) {
-                            return authResponse.body;
-                        }
-                        logger.debug("Authenticated snapshot request failed with HTTP status {} from {}",
-                                authResponse.statusCode, host);
-                    }
-                }
-            }
-            logger.debug("Snapshot request failed with HTTP status {} from {}", response.statusCode, host);
-        } catch (Exception e) {
+            return sendSnapshotRequest(SNAPSHOT_PATH);
+        } catch (DahuaHttpRedirectException e) {
+            errorInformer.accept(e.getRedirectMessage());
+        } catch (IOException e) {
             logger.warn("Could not retrieve snapshot from {}", host, e);
         }
         return null;
@@ -137,169 +144,311 @@ public class DahuaEventClient implements Runnable {
     public void openDoor(int doorNo) {
         try {
             String path = "/cgi-bin/accessControl.cgi?action=openDoor&UserID=101&Type=Remote&channel=" + doorNo;
-            OpenDoorHttpResponse response = sendOpenDoorRequest(path, null);
-            if (response.statusCode == 200) {
-                logger.debug("Open Door Success");
-            } else if (response.statusCode == 401) {
-                String challenge = response.wwwAuthenticate;
-                if (challenge != null) {
-                    String digestHeader = createDigestAuthorizationHeader(challenge, path);
-                    if (digestHeader != null) {
-                        OpenDoorHttpResponse authResponse = sendOpenDoorRequest(path, digestHeader);
-                        if (authResponse.statusCode == 200) {
-                            logger.debug("Open Door Success (with authentication)");
-                        } else {
-                            logger.debug("Open door request failed with HTTP status {} for door {} on {}",
-                                    authResponse.statusCode, doorNo, host);
-                        }
-                    }
-                } else {
-                    logger.debug("Open door request failed with HTTP status {} for door {} on {}", response.statusCode,
-                            doorNo, host);
-                }
-            } else {
-                logger.debug("Open door request failed with HTTP status {} for door {} on {}", response.statusCode,
-                        doorNo, host);
-            }
-        } catch (Exception e) {
+            sendAuthenticatedGetRequest(path, "Open Door");
+        } catch (DahuaHttpRedirectException e) {
+            errorInformer.accept(e.getRedirectMessage());
+        } catch (IOException e) {
             logger.warn("Could not open door {} on {}", doorNo, host, e);
         }
     }
 
-    private SnapshotHttpResponse sendSnapshotRequest(@Nullable String authorizationHeader) throws Exception {
-        try (Socket socket = new Socket()) {
-            socket.connect(new InetSocketAddress(host, 80), HTTP_TIMEOUT_SECONDS * 1000);
-            socket.setSoTimeout(HTTP_TIMEOUT_SECONDS * 1000);
-            StringBuilder request = new StringBuilder();
-            request.append("GET ").append(SNAPSHOT_PATH).append(" HTTP/1.1\r\n");
-            request.append("Host: ").append(host).append("\r\n");
-            request.append("Connection: close\r\n");
-            request.append("Accept: */*\r\n");
-            if (authorizationHeader != null) {
-                request.append("Authorization: ").append(authorizationHeader).append("\r\n");
-            }
-            request.append("\r\n");
-            OutputStream outputStream = socket.getOutputStream();
-            outputStream.write(request.toString().getBytes(StandardCharsets.ISO_8859_1));
-            outputStream.flush();
-            byte[] rawResponse = readHttpResponse(socket.getInputStream());
-            return parseSnapshotResponse(rawResponse);
+    /**
+     * Applies the audio codec fix required for WebRTC compatibility.
+     * Sets the VTO audio encoding to G.711A / 8 kHz on both main and sub streams via the
+     * Dahua configManager CGI API. This setting resets on device reboot and must be
+     * re-applied after each {@code SIPRegisterResult} event.
+     *
+     * @return {@code true} if the CGI call succeeded (HTTP 200), {@code false} otherwise
+     */
+    public boolean fixAudioCodec() {
+        String path = "/cgi-bin/configManager.cgi?action=setConfig"
+                + "&Encode%5B0%5D.MainFormat%5B0%5D.Audio.Compression=G.711A"
+                + "&Encode%5B0%5D.MainFormat%5B0%5D.Audio.Frequency=8000"
+                + "&Encode%5B0%5D.ExtraFormat%5B0%5D.Audio.Compression=G.711A"
+                + "&Encode%5B0%5D.ExtraFormat%5B0%5D.Audio.Frequency=8000";
+        try {
+            sendAuthenticatedGetRequest(path, "Audio codec fix");
+            return true;
+        } catch (DahuaHttpRedirectException e) {
+            logger.warn("Audio codec fix redirected on {}: {}", host, e.getMessage());
+        } catch (IOException e) {
+            logger.warn("Audio codec fix failed on {}", host, e);
         }
+        return false;
     }
 
-    private OpenDoorHttpResponse sendOpenDoorRequest(String path, @Nullable String authorizationHeader)
-            throws Exception {
-        try (Socket socket = new Socket()) {
-            socket.connect(new InetSocketAddress(host, 80), HTTP_TIMEOUT_SECONDS * 1000);
-            socket.setSoTimeout(HTTP_TIMEOUT_SECONDS * 1000);
-            StringBuilder request = new StringBuilder();
-            request.append("GET ").append(path).append(" HTTP/1.1\r\n");
-            request.append("Host: ").append(host).append("\r\n");
-            request.append("Connection: close\r\n");
-            if (authorizationHeader != null) {
-                request.append("Authorization: ").append(authorizationHeader).append("\r\n");
-            }
-            request.append("\r\n");
-            OutputStream outputStream = socket.getOutputStream();
-            outputStream.write(request.toString().getBytes(StandardCharsets.ISO_8859_1));
-            outputStream.flush();
-            byte[] rawResponse = readHttpResponse(socket.getInputStream());
-            return parseOpenDoorResponse(rawResponse);
-        }
-    }
-
-    private byte[] readHttpResponse(InputStream inputStream) throws Exception {
-        ByteArrayOutputStream headerStream = new ByteArrayOutputStream();
-        int state = 0;
-        while (true) {
-            int next = inputStream.read();
-            if (next == -1) {
-                break;
-            }
-            headerStream.write(next);
-            if (state == 0 && next == '\r') {
-                state = 1;
-            } else if (state == 1 && next == '\n') {
-                state = 2;
-            } else if (state == 2 && next == '\r') {
-                state = 3;
-            } else if (state == 3 && next == '\n') {
-                break;
-            } else {
-                state = 0;
-            }
-        }
-        byte[] headerBytes = headerStream.toByteArray();
-        int contentLength = extractContentLength(headerBytes);
-        ByteArrayOutputStream responseStream = new ByteArrayOutputStream();
-        responseStream.write(headerBytes);
-        byte[] buffer = new byte[4096];
-        if (contentLength >= 0) {
-            int remaining = contentLength;
-            while (remaining > 0) {
-                int read = inputStream.read(buffer, 0, Math.min(buffer.length, remaining));
-                if (read == -1) {
-                    break;
-                }
-                responseStream.write(buffer, 0, read);
-                remaining -= read;
-            }
-        } else {
-            while (true) {
-                try {
-                    int read = inputStream.read(buffer);
-                    if (read == -1) {
-                        break;
+    /**
+     * Sends a snapshot request with Digest auth.
+     * Uses HTTPS or HTTP based on the cached {@link #httpsAvailable} flag.
+     * Step 1: open connection, get 401 + challenge, close connection.
+     * Step 2: open fresh connection, send authenticated request.
+     */
+    private byte @Nullable [] sendSnapshotRequest(String path) throws IOException, DahuaHttpRedirectException {
+        boolean useHttps = httpsAvailable;
+        int port = useHttps ? 443 : 80;
+        int maxAttempts = 3;
+        for (int attempt = 0; attempt < maxAttempts; attempt++) {
+            try {
+                // Step 1: unauthenticated request — get 401 + Digest challenge, then close socket
+                String digestHeader = null;
+                try (Socket socket = useHttps ? buildTlsSocket(port) : plainSocket(port)) {
+                    socket.setSoTimeout(HTTP_TIMEOUT_MS);
+                    writeHttpGet(socket.getOutputStream(), path, null, false);
+                    SnapshotHttpResponse response = parseSnapshotResponse(socket.getInputStream());
+                    if (response.statusCode == HttpStatus.OK_200) {
+                        logger.debug("Snapshot OK: {} bytes from {}", response.body.length, host);
+                        return response.body;
                     }
-                    responseStream.write(buffer, 0, read);
-                } catch (SocketTimeoutException e) {
-                    logger.debug("Snapshot response read timed out without Content-Length; using partial body");
-                    break;
+                    if (response.statusCode == HttpStatus.UNAUTHORIZED_401) {
+                        String challenge = response.headers.get("www-authenticate");
+                        if (challenge != null) {
+                            digestHeader = createDigestAuthorizationHeader(challenge, path);
+                        }
+                    } else {
+                        if (response.statusCode == HttpStatus.MOVED_TEMPORARILY_302) {
+                            throw new DahuaHttpRedirectException("Snapshot request to " + host
+                                    + " redirected (HTTP 302) - device may require HTTPS; enable 'Use HTTPS' in the thing configuration");
+                        } else {
+                            logger.warn("Snapshot request to {} failed with unexpected HTTP status {}", host,
+                                    response.statusCode);
+                        }
+                        return null;
+                    }
+                }
+                // First socket is now fully closed before opening the second.
+                // Brief pause to let the device finish processing the TLS close_notify and
+                // free its connection slot before we open the authenticated connection.
+                Thread.sleep(300);
+
+                // Step 2: authenticated request on a fresh connection
+                if (digestHeader != null) {
+                    try (Socket authSocket = useHttps ? buildTlsSocket(port) : plainSocket(port)) {
+                        authSocket.setSoTimeout(HTTP_TIMEOUT_MS);
+                        writeHttpGet(authSocket.getOutputStream(), path, digestHeader, false);
+                        SnapshotHttpResponse authResponse = parseSnapshotResponse(authSocket.getInputStream());
+                        if (authResponse.statusCode == HttpStatus.OK_200) {
+                            logger.debug("Snapshot OK: {} bytes from {}", authResponse.body.length, host);
+                            return authResponse.body;
+                        }
+                        if (authResponse.statusCode == HttpStatus.MOVED_TEMPORARILY_302) {
+                            throw new DahuaHttpRedirectException("Snapshot request to " + host
+                                    + " redirected (HTTP 302) - device may require HTTPS; enable 'Use HTTPS' in the thing configuration");
+                        } else {
+                            logger.warn("Authenticated snapshot request to {} failed with unexpected HTTP status {}",
+                                    host, authResponse.statusCode);
+                        }
+                        return null;
+                    }
+                }
+                logger.debug("Snapshot request failed: no Digest challenge received from {}", host);
+                return null;
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                return null;
+            } catch (IOException e) {
+                if (attempt < maxAttempts - 1) {
+                    long delayMs = 750L * (1 << attempt); // 750 ms, 1.5 s
+                    logger.debug("Snapshot attempt {}/{} via {} to {} failed ({}), retrying in {} ms", attempt + 1,
+                            maxAttempts, useHttps ? "HTTPS" : "HTTP", host, e.getMessage(), delayMs);
+                    try {
+                        Thread.sleep(delayMs);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        return null;
+                    }
+                } else {
+                    throw e;
                 }
             }
         }
-        return responseStream.toByteArray();
+        throw new IOException("All snapshot attempts failed for " + host);
     }
 
-    private int extractContentLength(byte[] headerBytes) {
-        String headerText = new String(headerBytes, StandardCharsets.ISO_8859_1);
-        for (String line : headerText.split("\\r\\n")) {
-            if (line.regionMatches(true, 0, "Content-Length:", 0, "Content-Length:".length())) {
-                try {
-                    return Integer.parseInt(line.substring("Content-Length:".length()).trim());
-                } catch (NumberFormatException e) {
-                    return -1;
+    /**
+     * Sends an authenticated GET request with Digest auth.
+     * Used for door open and audio codec fix requests.
+     * Same sequential two-connection pattern as sendSnapshotRequest.
+     *
+     * @param path the CGI path to request
+     * @param actionName label used for logging (e.g. "Open Door", "Audio codec fix")
+     */
+    private void sendAuthenticatedGetRequest(String path, String actionName)
+            throws IOException, DahuaHttpRedirectException {
+        boolean useHttps = httpsAvailable;
+        int port = useHttps ? 443 : 80;
+        int maxAttempts = 3;
+        for (int attempt = 0; attempt < maxAttempts; attempt++) {
+            try {
+                String digestHeader = null;
+                try (Socket socket = useHttps ? buildTlsSocket(port) : plainSocket(port)) {
+                    socket.setSoTimeout(HTTP_TIMEOUT_MS);
+                    writeHttpGet(socket.getOutputStream(), path, null, false);
+                    OpenDoorHttpResponse response = parseOpenDoorResponse(socket.getInputStream());
+                    if (response.statusCode == HttpStatus.OK_200) {
+                        logger.debug("{} succeeded on {}", actionName, host);
+                        return;
+                    }
+                    if (response.statusCode == HttpStatus.UNAUTHORIZED_401) {
+                        String challenge = response.wwwAuthenticate;
+                        if (challenge != null) {
+                            digestHeader = createDigestAuthorizationHeader(challenge, path);
+                        }
+                    } else {
+                        if (response.statusCode == HttpStatus.MOVED_TEMPORARILY_302) {
+                            throw new DahuaHttpRedirectException(actionName + " request to " + host
+                                    + " redirected (HTTP 302) - device may require HTTPS; enable 'Use HTTPS' in the thing configuration");
+                        } else {
+                            logger.warn("{} request to {} failed with unexpected HTTP status {}", actionName, host,
+                                    response.statusCode);
+                        }
+                        return;
+                    }
+                }
+                // First socket is now fully closed before opening the second
+                Thread.sleep(300);
+
+                if (digestHeader != null) {
+                    try (Socket authSocket = useHttps ? buildTlsSocket(port) : plainSocket(port)) {
+                        authSocket.setSoTimeout(HTTP_TIMEOUT_MS);
+                        writeHttpGet(authSocket.getOutputStream(), path, digestHeader, false);
+                        OpenDoorHttpResponse authResponse = parseOpenDoorResponse(authSocket.getInputStream());
+                        if (authResponse.statusCode == HttpStatus.OK_200) {
+                            logger.debug("{} succeeded (with authentication) on {}", actionName, host);
+                        } else if (authResponse.statusCode == HttpStatus.MOVED_TEMPORARILY_302) {
+                            throw new DahuaHttpRedirectException(actionName + " request to " + host
+                                    + " redirected (HTTP 302) - device may require HTTPS; enable 'Use HTTPS' in the thing configuration");
+                        } else {
+                            logger.warn("{} request to {} failed with unexpected HTTP status {}", actionName, host,
+                                    authResponse.statusCode);
+                        }
+                        return;
+                    }
+                }
+                logger.debug("{} request failed: no Digest challenge received from {}", actionName, host);
+                return;
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                return;
+            } catch (IOException e) {
+                if (attempt < maxAttempts - 1) {
+                    long delayMs = 750L * (1 << attempt); // 750 ms, 1.5 s
+                    logger.debug("{} attempt {}/{} via {} to {} failed ({}), retrying in {} ms", actionName,
+                            attempt + 1, maxAttempts, useHttps ? "HTTPS" : "HTTP", host, e.getMessage(), delayMs);
+                    try {
+                        Thread.sleep(delayMs);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        return;
+                    }
+                } else {
+                    throw e;
                 }
             }
         }
-        return -1;
+        throw new IOException("All open door attempts failed for " + host);
     }
 
-    private SnapshotHttpResponse parseSnapshotResponse(byte[] rawResponse) {
-        int headerEnd = -1;
-        for (int i = 0; i < rawResponse.length - 3; i++) {
-            if (rawResponse[i] == '\r' && rawResponse[i + 1] == '\n' && rawResponse[i + 2] == '\r'
-                    && rawResponse[i + 3] == '\n') {
-                headerEnd = i + 4;
-                break;
-            }
+    private Socket plainSocket(int port) throws IOException {
+        Socket socket = new Socket();
+        socket.connect(new InetSocketAddress(host, port), HTTP_TIMEOUT_MS);
+        return socket;
+    }
+
+    private Socket buildTlsSocket(int port) throws IOException {
+        // Dahua firmware uses TLS_RSA_WITH_AES_256_GCM_SHA384, removed from Java 21 built-in TLS.
+        // BCJSSE supports this cipher and provides standard SSLSocket close() semantics:
+        // graceful TLS close_notify + TCP FIN (no TCP RST), which is required for the device
+        // to immediately accept the next connection for the authenticated request.
+        //
+        // OSGi/Karaf may already have a BCJSSE bundle installed whose class loader differs from our
+        // embedded copy. BCJSSE loads internal classes (e.g. SSLSocketUtil) via the thread context
+        // class loader. We temporarily set it to our embedded BouncyCastleJsseProvider's class
+        // loader so that BCJSSE's internal class lookups stay within our bundle.
+        Socket tcpSocket = new Socket();
+        ClassLoader savedCl = Thread.currentThread().getContextClassLoader();
+        try {
+            Thread.currentThread().setContextClassLoader(BouncyCastleJsseProvider.class.getClassLoader());
+            tcpSocket.connect(new InetSocketAddress(host, port), HTTP_TIMEOUT_MS);
+            SSLSocket sslSocket = (SSLSocket) BC_SSL_SOCKET_FACTORY.createSocket(tcpSocket, host, port, true);
+            sslSocket.setSoTimeout(HTTP_TIMEOUT_MS);
+            sslSocket.setEnabledProtocols(new String[] { "TLSv1.2" });
+            sslSocket.setEnabledCipherSuites(new String[] { "TLS_RSA_WITH_AES_256_GCM_SHA384" });
+            sslSocket.startHandshake();
+            logger.debug("BCJSSE TLS connected to {}:{} using TLS_RSA_WITH_AES_256_GCM_SHA384", host, port);
+            return sslSocket;
+        } catch (ConnectException e) {
+            // Port unreachable: re-throw directly so callers can detect it without unwrapping
+            tcpSocket.close();
+            throw e;
+        } catch (Exception e) {
+            tcpSocket.close();
+            throw new IOException("TLS handshake failed to " + host + ":" + port + ": " + e.getMessage(), e);
+        } finally {
+            Thread.currentThread().setContextClassLoader(savedCl);
         }
+    }
+
+    /**
+     * Builds the BCJSSE {@link SSLSocketFactory} once at class load time.
+     * Uses directly instantiated BouncyCastle provider instances with the {@link SSLContext},
+     * without registering them globally, so that TLS_RSA_WITH_AES_256_GCM_SHA384 (removed from
+     * Java 21 built-in TLS) is available.
+     */
+    private static SSLSocketFactory buildBcSslSocketFactory() {
+        // Use our embedded BouncyCastleJsseProvider instance directly for both the TrustManager
+        // and the SSLContext (not via the global Security registry).
+        //
+        // Why not TrustManagerFactory.getInstance(alg) / Security.getProviders() approach:
+        // - JCA provider selection uses the global registry; Karaf globally registers its own
+        // bctls bundle's BouncyCastleJsseProvider at higher priority than SunJSSE.
+        // - Using Karaf's globally-registered BCJSSE factory fails with NoClassDefFoundError
+        // (ProvTrustManagerFactorySpi is in Karaf's bundle, invisible to our classloader).
+        // - Using SunJSSE's X509TrustManagerImpl fails because BCJSSE passes authType "KE:RSA"
+        // to checkServerTrusted(); SunJSSE does not recognise that format → certificate_unknown.
+        //
+        // Solution: supply our local embedded bcjsse instance as the explicit Provider to both
+        // TrustManagerFactory.getInstance() and SSLContext.getInstance(). Class loading then
+        // goes through bcjsse's own classloader (our embedded classes), not Karaf's bundle.
+        // BCJSSE's trust manager also speaks BCJSSE's own authType format natively.
+        ClassLoader savedCl = Thread.currentThread().getContextClassLoader();
+        try {
+            Thread.currentThread().setContextClassLoader(BouncyCastleJsseProvider.class.getClassLoader());
+            BouncyCastleJsseProvider bcjsse = new BouncyCastleJsseProvider(new BouncyCastleProvider());
+            TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm(),
+                    bcjsse);
+            tmf.init((KeyStore) null);
+            SSLContext ctx = SSLContext.getInstance("TLS", bcjsse);
+            ctx.init(null, tmf.getTrustManagers(), SECURE_RANDOM);
+            return ctx.getSocketFactory();
+        } catch (NoSuchAlgorithmException | KeyManagementException | KeyStoreException e) {
+            throw new IllegalStateException("Failed to initialize BCJSSE SSL context", e);
+        } finally {
+            Thread.currentThread().setContextClassLoader(savedCl);
+        }
+    }
+
+    private void writeHttpGet(OutputStream out, String path, @Nullable String authorizationHeader, boolean keepAlive)
+            throws IOException {
+        StringBuilder req = new StringBuilder();
+        req.append("GET ").append(path).append(" HTTP/1.1\r\n");
+        req.append("Host: ").append(host).append("\r\n");
+        if (authorizationHeader != null) {
+            req.append("Authorization: ").append(authorizationHeader).append("\r\n");
+        }
+        req.append("Connection: ").append(keepAlive ? "keep-alive" : "close").append("\r\n\r\n");
+        out.write(req.toString().getBytes(StandardCharsets.US_ASCII));
+        out.flush();
+    }
+
+    private SnapshotHttpResponse parseSnapshotResponse(InputStream in) throws IOException {
+        byte[] raw = readHttpResponse(in);
+        int headerEnd = findHeaderEnd(raw);
         if (headerEnd < 0) {
             return new SnapshotHttpResponse(0, Map.of(), new byte[0]);
         }
-        String headerText = new String(rawResponse, 0, headerEnd, StandardCharsets.ISO_8859_1);
-        String[] lines = headerText.split("\\r\\n");
-        int statusCode = 0;
-        if (lines.length > 0) {
-            String[] statusParts = lines[0].split(" ");
-            if (statusParts.length > 1) {
-                try {
-                    statusCode = Integer.parseInt(statusParts[1]);
-                } catch (NumberFormatException e) {
-                    statusCode = 0;
-                }
-            }
-        }
+        String headerSection = new String(raw, 0, headerEnd, StandardCharsets.US_ASCII);
+        String[] lines = headerSection.split("\r\n");
+        int statusCode = parseStatusCode(lines[0]);
         Map<String, String> headers = new HashMap<>();
         for (int i = 1; i < lines.length; i++) {
             int colon = lines[i].indexOf(':');
@@ -308,35 +457,170 @@ public class DahuaEventClient implements Runnable {
                         lines[i].substring(colon + 1).trim());
             }
         }
-        byte[] body = Arrays.copyOfRange(rawResponse, headerEnd, rawResponse.length);
+        byte[] body = Arrays.copyOfRange(raw, headerEnd + 4, raw.length);
         return new SnapshotHttpResponse(statusCode, headers, body);
     }
 
-    private OpenDoorHttpResponse parseOpenDoorResponse(byte[] rawResponse) {
-        String headerText = new String(rawResponse, StandardCharsets.ISO_8859_1);
-        String[] lines = headerText.split("\\r\\n");
-        int statusCode = 0;
-        if (lines.length > 0) {
-            String[] statusParts = lines[0].split(" ");
-            if (statusParts.length > 1) {
-                try {
-                    statusCode = Integer.parseInt(statusParts[1]);
-                } catch (NumberFormatException e) {
-                    statusCode = 0;
-                }
-            }
+    private OpenDoorHttpResponse parseOpenDoorResponse(InputStream in) throws IOException {
+        byte[] raw = readHttpResponse(in);
+        int headerEnd = findHeaderEnd(raw);
+        if (headerEnd < 0) {
+            return new OpenDoorHttpResponse(0, null);
         }
+        String headerSection = new String(raw, 0, headerEnd, StandardCharsets.US_ASCII);
+        String[] lines = headerSection.split("\r\n");
+        int statusCode = parseStatusCode(lines[0]);
         String wwwAuthenticate = null;
         for (int i = 1; i < lines.length; i++) {
-            if (lines[i].regionMatches(true, 0, "WWW-Authenticate:", 0, "WWW-Authenticate:".length())) {
-                wwwAuthenticate = lines[i].substring("WWW-Authenticate:".length()).trim();
+            int colon = lines[i].indexOf(':');
+            if (colon > 0 && "www-authenticate".equals(lines[i].substring(0, colon).trim().toLowerCase(Locale.ROOT))) {
+                wwwAuthenticate = lines[i].substring(colon + 1).trim();
                 break;
             }
         }
         return new OpenDoorHttpResponse(statusCode, wwwAuthenticate);
     }
 
-    private @Nullable String createDigestAuthorizationHeader(String challenge, String requestPath) throws Exception {
+    /**
+     * Reads an HTTP response in a TLS-safe way: reads headers until the blank line,
+     * then reads the body via Content-Length or chunked transfer encoding.
+     * Avoids waiting for EOF/close_notify which old Dahua firmware may never send.
+     */
+    private byte[] readHttpResponse(InputStream in) throws IOException {
+        // Read byte-by-byte until \r\n\r\n (end of headers)
+        ByteArrayOutputStream headerBuf = new ByteArrayOutputStream(4096);
+        int b;
+        int last4 = 0;
+        while ((b = in.read()) != -1) {
+            headerBuf.write(b);
+            last4 = ((last4 << 8) | b) & 0xFFFFFFFF;
+            if (last4 == 0x0D0A0D0A) { // \r\n\r\n
+                break;
+            }
+            if (headerBuf.size() > 65536) {
+                break; // safety limit
+            }
+        }
+        byte[] headerBytes = headerBuf.toByteArray();
+        String headerSection = new String(headerBytes, StandardCharsets.US_ASCII);
+        // Check for chunked transfer encoding
+        boolean isChunked = false;
+        int contentLength = -1;
+        for (String line : headerSection.split("\r\n")) {
+            String lower = line.toLowerCase(Locale.ROOT);
+            if (lower.startsWith("transfer-encoding:") && lower.contains("chunked")) {
+                isChunked = true;
+            } else if (lower.startsWith("content-length:")) {
+                try {
+                    contentLength = Integer.parseInt(line.substring(15).trim());
+                } catch (NumberFormatException e) {
+                    // ignore malformed header
+                }
+            }
+        }
+
+        ByteArrayOutputStream result = new ByteArrayOutputStream(headerBytes.length + Math.max(contentLength, 0));
+        result.write(headerBytes);
+
+        if (isChunked) {
+            // Read chunked body: each chunk is preceded by hex size line
+            byte[] chunkBody = readChunkedBody(in);
+            result.write(chunkBody);
+        } else if (contentLength > 0) {
+            // Read exactly contentLength bytes
+            byte[] body = new byte[contentLength];
+            int offset = 0;
+            while (offset < contentLength) {
+                int n = in.read(body, offset, contentLength - offset);
+                if (n == -1) {
+                    break;
+                }
+                offset += n;
+            }
+            result.write(body, 0, offset);
+        }
+        return result.toByteArray();
+    }
+
+    private byte[] readChunkedBody(InputStream in) throws IOException {
+        ByteArrayOutputStream body = new ByteArrayOutputStream(65536);
+        byte[] lineBuf = new byte[64];
+        while (true) {
+            // Read chunk size line (hex digits followed by \r\n)
+            int lineLen = 0;
+            int prev = 0;
+            int cur;
+            while ((cur = in.read()) != -1) {
+                if (prev == '\r' && cur == '\n') {
+                    break;
+                }
+                if (cur != '\r') {
+                    if (lineLen < lineBuf.length) {
+                        lineBuf[lineLen++] = (byte) cur;
+                    }
+                }
+                prev = cur;
+            }
+            if (lineLen == 0) {
+                break;
+            }
+            String sizeLine = new String(lineBuf, 0, lineLen, StandardCharsets.US_ASCII).trim();
+            // Strip chunk extensions (e.g. "1a;extension")
+            int semi = sizeLine.indexOf(';');
+            if (semi >= 0) {
+                sizeLine = sizeLine.substring(0, semi).trim();
+            }
+            int chunkSize;
+            try {
+                chunkSize = Integer.parseInt(sizeLine, 16);
+            } catch (NumberFormatException e) {
+                break;
+            }
+            if (chunkSize == 0) {
+                // Last chunk — consume trailing \r\n
+                in.read();
+                in.read();
+                break;
+            }
+            byte[] chunk = new byte[chunkSize];
+            int offset = 0;
+            while (offset < chunkSize) {
+                int n = in.read(chunk, offset, chunkSize - offset);
+                if (n == -1) {
+                    break;
+                }
+                offset += n;
+            }
+            body.write(chunk, 0, offset);
+            // Consume trailing \r\n after chunk data
+            in.read();
+            in.read();
+        }
+        return body.toByteArray();
+    }
+
+    private int findHeaderEnd(byte[] data) {
+        for (int i = 0; i < data.length - 3; i++) {
+            if (data[i] == '\r' && data[i + 1] == '\n' && data[i + 2] == '\r' && data[i + 3] == '\n') {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private int parseStatusCode(String statusLine) {
+        String[] parts = statusLine.split(" ", 3);
+        if (parts.length >= 2) {
+            try {
+                return Integer.parseInt(parts[1]);
+            } catch (NumberFormatException e) {
+                logger.trace("Could not parse HTTP status code from status line: {}", statusLine);
+            }
+        }
+        return 0;
+    }
+
+    private @Nullable String createDigestAuthorizationHeader(String challenge, String requestPath) {
         if (!challenge.toLowerCase(Locale.ROOT).startsWith("digest")) {
             return null;
         }
@@ -418,14 +702,18 @@ public class DahuaEventClient implements Runnable {
         return result;
     }
 
-    private String md5Hex(String value) throws Exception {
-        MessageDigest digest = MessageDigest.getInstance("MD5");
-        byte[] hash = digest.digest(value.getBytes(StandardCharsets.ISO_8859_1));
-        StringBuilder builder = new StringBuilder(hash.length * 2);
-        for (byte b : hash) {
-            builder.append(String.format("%02x", b));
+    private String md5Hex(String value) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("MD5");
+            byte[] hash = digest.digest(value.getBytes(StandardCharsets.ISO_8859_1));
+            StringBuilder builder = new StringBuilder(hash.length * 2);
+            for (byte b : hash) {
+                builder.append(String.format("%02x", b));
+            }
+            return builder.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("MD5 digest algorithm not available", e);
         }
-        return builder.toString();
     }
 
     private String randomHex(int length) {
@@ -555,102 +843,347 @@ public class DahuaEventClient implements Runnable {
         localSock.getOutputStream().write(buffer.array());
     }
 
-    public ArrayList<String> receive() throws IOException {
-        ArrayList<String> p2pReturnData = new ArrayList<String>();
-        byte[] buffer = new byte[8192];
-        byte[] header = new byte[32];
-        ByteBuffer bbuffer;
-        int lenRecved = 1;
-        int timeout = 5;
+    /**
+     * Downloads a file over the existing DHIP session via FileManager.downloadFile.
+     * No separate login/session is created.
+     *
+     * @param remotePath full file path on VTO SD card (for example /mnt/sd/Record/.../file.dav)
+     * @param timeoutMs socket timeout for this transfer
+     * @return file bytes or null on failure
+     * @throws IOException if the download times out or a socket error occurs
+     */
+    public synchronized byte @Nullable [] downloadFileFromActiveSession(String remotePath, int timeoutMs)
+            throws IOException {
+        if (remotePath.isBlank()) {
+            return null;
+        }
 
+        final Socket localSock = sock;
+        if (localSock == null || localSock.isClosed()) {
+            logger.debug("Cannot download file, DHIP socket is not connected");
+            return null;
+        }
+
+        int oldTimeout = 0;
+        try {
+            oldTimeout = localSock.getSoTimeout();
+            localSock.setSoTimeout(timeoutMs);
+
+            Map<String, Object> queryArgs = new HashMap<>();
+            queryArgs.put("method", "FileManager.downloadFile");
+            queryArgs.put("magic", "0x1234");
+            queryArgs.put("params", Map.of("fileName", remotePath));
+            queryArgs.put("id", this.id);
+            queryArgs.put("session", this.sessionId);
+
+            send(new Gson().toJson(queryArgs));
+
+            ByteArrayOutputStream fileBytes = new ByteArrayOutputStream(64 * 1024);
+            boolean sawBinary = false;
+            Long expectedLength = null;
+            long deadline = System.currentTimeMillis() + timeoutMs;
+
+            while (System.currentTimeMillis() < deadline) {
+                ArrayList<byte[]> payloads;
+                try {
+                    payloads = receiveRawPayloads();
+                } catch (SocketTimeoutException e) {
+                    if (sawBinary) {
+                        break;
+                    }
+                    continue;
+                }
+
+                for (byte[] payload : payloads) {
+                    JsonObject asJson = tryParseJson(payload);
+                    if (asJson != null) {
+                        if (asJson.has("method")
+                                && "client.notifyEventStream".equals(asJson.get("method").getAsString())) {
+                            eventListener.onEvent(asJson);
+                            continue;
+                        }
+                        if (asJson.has("error")) {
+                            logger.debug("DHIP download error for {}: {}", remotePath, asJson.get("error"));
+                            return null;
+                        }
+                        expectedLength = mergeExpectedLength(expectedLength, extractExpectedLength(asJson));
+                        continue;
+                    }
+
+                    int prefixEnd = findJsonPrefixEnd(payload);
+                    if (prefixEnd > 0) {
+                        JsonObject prefixJson = tryParseJson(Arrays.copyOf(payload, prefixEnd));
+                        if (prefixJson != null && prefixJson.has("error")) {
+                            logger.debug("DHIP download prefix error for {}: {}", remotePath, prefixJson.get("error"));
+                            return null;
+                        }
+                        if (prefixJson != null) {
+                            expectedLength = mergeExpectedLength(expectedLength, extractExpectedLength(prefixJson));
+                        }
+                        if (prefixEnd < payload.length) {
+                            fileBytes.write(payload, prefixEnd, payload.length - prefixEnd);
+                            sawBinary = true;
+                        }
+                    } else {
+                        fileBytes.write(payload);
+                        sawBinary = true;
+                    }
+
+                    if (expectedLength != null && fileBytes.size() >= expectedLength) {
+                        return fileBytes.toByteArray();
+                    }
+                }
+            }
+
+            if (!sawBinary) {
+                logger.debug("DHIP download returned no binary payload for {}", remotePath);
+                return null;
+            }
+            if (expectedLength != null && fileBytes.size() < expectedLength) {
+                throw new DahuaDownloadTimeoutException("DHIP download timed out before completion for " + remotePath
+                        + " (received " + fileBytes.size() + " of " + expectedLength + " bytes)");
+            }
+            return fileBytes.toByteArray();
+        } catch (DahuaDownloadTimeoutException e) {
+            throw e;
+        } catch (IOException e) {
+            throw new IOException("DHIP download failed for " + remotePath + ": " + e.getMessage(), e);
+        } finally {
+            try {
+                localSock.setSoTimeout(oldTimeout);
+            } catch (IOException e) {
+                logger.trace("Could not restore socket timeout after DHIP download", e);
+            }
+        }
+    }
+
+    public static class DahuaDownloadTimeoutException extends IOException {
+        private static final long serialVersionUID = 1L;
+
+        public DahuaDownloadTimeoutException(String message) {
+            super(message);
+        }
+    }
+
+    private @Nullable JsonObject tryParseJson(byte[] payload) {
+        try {
+            String txt = new String(payload, StandardCharsets.UTF_8).trim();
+            if (txt.isEmpty() || (!txt.startsWith("{") && !txt.startsWith("["))) {
+                return null;
+            }
+            return gson.fromJson(txt, JsonObject.class);
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    private @Nullable Long extractExpectedLength(JsonObject json) {
+        Long length = extractLengthFromObject(json);
+        if (length != null) {
+            return length;
+        }
+        if (json.has("params") && json.get("params").isJsonObject()) {
+            length = extractLengthFromObject(json.getAsJsonObject("params"));
+            if (length != null) {
+                return length;
+            }
+        }
+        if (json.has("result") && json.get("result").isJsonObject()) {
+            length = extractLengthFromObject(json.getAsJsonObject("result"));
+            if (length != null) {
+                return length;
+            }
+        }
+        return null;
+    }
+
+    private @Nullable Long extractLengthFromObject(JsonObject obj) {
+        for (String field : DOWNLOAD_LENGTH_FIELDS) {
+            if (obj.has(field)) {
+                Long value = parseLengthValue(obj.get(field));
+                if (value != null && value > 0) {
+                    return value;
+                }
+            }
+        }
+        return null;
+    }
+
+    private @Nullable Long parseLengthValue(JsonElement element) {
+        if (element.isJsonPrimitive()) {
+            if (element.getAsJsonPrimitive().isNumber()) {
+                return element.getAsLong();
+            }
+            if (element.getAsJsonPrimitive().isString()) {
+                try {
+                    return Long.parseLong(element.getAsString());
+                } catch (NumberFormatException e) {
+                    return null;
+                }
+            }
+        }
+        return null;
+    }
+
+    private @Nullable Long mergeExpectedLength(@Nullable Long current, @Nullable Long candidate) {
+        if (candidate == null) {
+            return current;
+        }
+        if (current == null) {
+            return candidate;
+        }
+        return Math.max(current, candidate);
+    }
+
+    private int findJsonPrefixEnd(byte[] payload) {
+        int start = -1;
+        for (int i = 0; i < payload.length; i++) {
+            byte b = payload[i];
+            if (!Character.isWhitespace((char) (b & 0xff))) {
+                if (b == '{') {
+                    start = i;
+                }
+                break;
+            }
+        }
+        if (start < 0) {
+            return -1;
+        }
+
+        int depth = 0;
+        boolean inString = false;
+        boolean escaping = false;
+        for (int i = start; i < payload.length; i++) {
+            char c = (char) (payload[i] & 0xff);
+            if (escaping) {
+                escaping = false;
+                continue;
+            }
+            if (c == '\\') {
+                if (inString) {
+                    escaping = true;
+                }
+                continue;
+            }
+            if (c == '"') {
+                inString = !inString;
+                continue;
+            }
+            if (inString) {
+                continue;
+            }
+            if (c == '{') {
+                depth++;
+            } else if (c == '}') {
+                depth--;
+                if (depth == 0) {
+                    int end = i + 1;
+                    while (end < payload.length && Character.isWhitespace((char) (payload[end] & 0xff))) {
+                        end++;
+                    }
+                    return end;
+                }
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Receives one TCP read and extracts complete DHIP payload frames.
+     *
+     * The parser keeps incomplete tail bytes in {@code residualBuffer} and prepends them to the next read.
+     * Each returned entry is the raw payload (header stripped), which may be JSON, binary, or JSON+binary.
+     */
+    private ArrayList<byte[]> receiveRawPayloads() throws IOException {
+        ArrayList<byte[]> payloads = new ArrayList<>();
+
+        final Socket localSock = sock;
+        if (localSock == null) {
+            throw new IOException("Socket is not connected");
+        }
+
+        InputStream input = localSock.getInputStream();
+        byte[] readBuffer = new byte[8192];
+        int bytesRead = input.read(readBuffer);
+        if (bytesRead < 0) {
+            throw new IOException("Connection closed by remote host");
+        }
+
+        ByteBuffer data;
+        if (residualBuffer.hasRemaining()) {
+            ByteBuffer combined = ByteBuffer.allocate(residualBuffer.remaining() + bytesRead);
+            combined.put(residualBuffer);
+            combined.put(readBuffer, 0, bytesRead);
+            combined.flip();
+            data = combined;
+            residualBuffer = ByteBuffer.allocate(0);
+        } else {
+            data = ByteBuffer.wrap(readBuffer, 0, bytesRead);
+        }
+
+        final long magic = 0x2000000044484950L;
+
+        while (data.hasRemaining()) {
+            if (data.remaining() < 32) {
+                residualBuffer = ByteBuffer.allocate(data.remaining());
+                residualBuffer.put(data);
+                residualBuffer.flip();
+                break;
+            }
+            // DHIP Protocol Header Structure (32 bytes):
+            // Offset 0-7: Magic value (0x2000000044484950)
+            // Offset 8-11: Session ID
+            // Offset 12-15: Sequence number
+            // Offset 16-19: Length of received data (lenRecved)
+            // Offset 20-23: Reserved
+            // Offset 24-27: Expected length for multi-part messages
+            // Offset 28-31: Reserved
+            data.order(ByteOrder.BIG_ENDIAN);
+            long foundMagic = data.getLong(data.position());
+            if (foundMagic != magic) {
+                data.get();
+                continue;
+            }
+
+            int frameStart = data.position();
+            ByteBuffer headerView = data.duplicate();
+            headerView.order(ByteOrder.LITTLE_ENDIAN);
+            int payloadLen = headerView.getInt(frameStart + 16);
+            if (payloadLen < 0 || payloadLen > 20 * 1024 * 1024) {
+                data.get();
+                continue;
+            }
+
+            if (data.remaining() < 32 + payloadLen) {
+                residualBuffer = ByteBuffer.allocate(data.remaining());
+                residualBuffer.put(data);
+                residualBuffer.flip();
+                break;
+            }
+
+            data.position(frameStart + 32);
+            byte[] payload = new byte[payloadLen];
+            data.get(payload);
+            payloads.add(payload);
+        }
+
+        return payloads;
+    }
+
+    public ArrayList<String> receive() throws IOException {
         final Socket localSock = sock;
         if (localSock == null) {
             logger.debug("Socket is not connected");
             throw new IOException("Socket is not connected");
         }
 
-        try {
-            localSock.setSoTimeout(timeout * 1000); // Set timeout in milliseconds
-            InputStream input = localSock.getInputStream();
-            int bytesRead = input.read(buffer);
-            if (bytesRead < 0) {
-                // End of stream - connection closed
-                throw new IOException("Connection closed by remote host");
-            }
-
-            // Combine residual buffer with new data
-            if (residualBuffer.hasRemaining()) {
-                ByteBuffer combined = ByteBuffer.allocate(residualBuffer.remaining() + bytesRead);
-                combined.put(residualBuffer);
-                combined.put(buffer, 0, bytesRead);
-                combined.flip();
-                bbuffer = combined;
-                residualBuffer = ByteBuffer.allocate(0); // Clear residual
-            } else {
-                bbuffer = ByteBuffer.wrap(buffer, 0, bytesRead);
-            }
-        } catch (IOException e) {
-            logger.trace("IOException in receive(): {}", e.getMessage());
-            throw e;
+        localSock.setSoTimeout(5000);
+        ArrayList<String> packets = new ArrayList<>();
+        ArrayList<byte[]> payloads = receiveRawPayloads();
+        for (byte[] payload : payloads) {
+            packets.add(new String(payload, StandardCharsets.UTF_8));
         }
-
-        while (bbuffer.hasRemaining()) {
-            // Ensure we have enough bytes for at least the magic value
-            if (bbuffer.remaining() < Long.BYTES) {
-                // Save remaining bytes for next read
-                residualBuffer = ByteBuffer.allocate(bbuffer.remaining());
-                residualBuffer.put(bbuffer);
-                residualBuffer.flip();
-                break;
-            }
-
-            bbuffer.order(ByteOrder.BIG_ENDIAN);
-            if (bbuffer.getLong(bbuffer.position()) == 0x2000000044484950L) {
-                // Ensure we have a full header before reading it
-                if (bbuffer.remaining() < 32) {
-                    // Save remaining bytes for next read
-                    residualBuffer = ByteBuffer.allocate(bbuffer.remaining());
-                    residualBuffer.put(bbuffer);
-                    residualBuffer.flip();
-                    break;
-                }
-                bbuffer.order(ByteOrder.LITTLE_ENDIAN);
-                // DHIP Protocol Header Structure (32 bytes):
-                // Offset 0-7: Magic value (0x2000000044484950)
-                // Offset 8-11: Session ID
-                // Offset 12-15: Sequence number
-                // Offset 16-19: Length of received data (lenRecved)
-                // Offset 20-23: Reserved
-                // Offset 24-27: Expected length for multi-part messages
-                // Offset 28-31: Reserved
-                int frameStart = bbuffer.position();
-                lenRecved = bbuffer.getInt(frameStart + 16);
-                bbuffer.get(header, 0, 32); // advances position by 32 to payload start
-
-            } else {
-                if (lenRecved > 0) {
-                    // Ensure we have the full payload before reading it
-                    if (bbuffer.remaining() < lenRecved) {
-                        // Save from header start to preserve full frame for the next read.
-                        ByteBuffer residualSlice = bbuffer.duplicate();
-                        int headerStartPosition = Math.max(0, bbuffer.position() - 32);
-                        residualSlice.position(headerStartPosition);
-                        residualBuffer = ByteBuffer.allocate(residualSlice.remaining());
-                        residualBuffer.put(residualSlice);
-                        residualBuffer.flip();
-                        break;
-                    }
-                    String p2pData = new String(bbuffer.array(), bbuffer.arrayOffset() + bbuffer.position(), lenRecved,
-                            StandardCharsets.UTF_8);
-                    bbuffer.position(bbuffer.position() + lenRecved);
-                    p2pReturnData.add(p2pData);
-                    lenRecved = 0;
-                } else {
-                    break;
-                }
-            }
-        }
-        return p2pReturnData;
+        return packets;
     }
 
     @SuppressWarnings("unchecked")

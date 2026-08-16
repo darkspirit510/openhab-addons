@@ -4,7 +4,7 @@
 
 ## Supported Things
 
-The binding supports `bridge-api2`, `device`, `room`, `zone`, and in some cases `area` thing types.
+The binding supports `bridge-api2`, `device`, `room`, `zone`, `service-group`, and in some cases `area` thing types.
 The `bridge-api2` thing type represents the Hue Bridge which is the server for all other things.
 The `device` thing type represents a piece of physical equipment in the home.
 Such `device` things may contain either a _light_, a _button_, or (one or more) _sensors_.
@@ -13,6 +13,8 @@ Buttons are devices having one or more push buttons.
 Sensors can be (for example) light level sensors, temperature sensors, or motion sensors.
 The `room` and `zone` thing type represents logical groupings of equipment in the home, either within a specific room, or a logical group of equipment.
 In addition, third generation bridges (such as the  Hue Bridge Pro, or higher) support an `area` thing type which represents the area covered by lights comprising a MotionAware™ area.
+The `service-group` thing type represents groupings that amalgamate the inputs of multiple sensors.
+e.g. for amalgamating two or more motion sensors to produce a common action.
 
 ## Thing Configuration
 
@@ -64,9 +66,10 @@ The configuration of all things (as described above) is the same regardless of w
 
 Bridge Things support the following channels:
 
-| Channel ID                                      | Item Type          | Description                                 |
-|-------------------------------------------------|--------------------|---------------------------------------------|
-| automation#11111111-2222-3333-4444-555555555555 | Switch             | Enable / disable the respective automation. |
+| Channel ID                                      | Item Type          | Description                                                      |
+|-------------------------------------------------|--------------------|------------------------------------------------------------------|
+| automation#11111111-2222-3333-4444-555555555555 | Switch             | Enable / disable the respective automation.                      |
+| software#update-ready                           | Trigger            | Sends an event when there is a software update ready to install. |
 
 The Bridge dynamically creates `automation` channels corresponding to the automations in the Hue App;
 the '11111111-2222-3333-4444-555555555555' is the unique id of the respective automation.
@@ -240,6 +243,23 @@ openhab> openhab:hue hue:bridge-api2:g24 things > myThingsFile.things
 ```
 
 ## Rule Actions
+
+### Software Update
+
+The Bridge has a `software#update-ready` channel which is triggered if a software update is ready to install.
+This channel can be used in a rule to initiate a software update of the bridge or its connected `device` things.
+
+```java
+rule "Install Software Update"
+when
+  Channel 'hue:bridge-api2:g24:software#update-ready' triggered
+then
+  val hueActions = getActions("hue","hue:bridge-api2:g24")
+  hueActions.installUpdate()
+end
+```
+
+### Dynamics
 
 This binding includes a rule action, which implements dynamic (i.e. gradual) transitions to a new scene or light(s) state.
 Each thing has a separate action instance, which can be retrieved as follows.

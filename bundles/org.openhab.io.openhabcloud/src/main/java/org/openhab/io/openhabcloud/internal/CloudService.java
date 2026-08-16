@@ -22,6 +22,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 
 import org.eclipse.jdt.annotation.Nullable;
 import org.eclipse.jetty.client.HttpClient;
@@ -34,6 +35,8 @@ import org.openhab.core.events.EventPublisher;
 import org.openhab.core.events.EventSubscriber;
 import org.openhab.core.id.InstanceUUID;
 import org.openhab.core.io.net.http.HttpClientFactory;
+import org.openhab.core.io.rest.Webhook;
+import org.openhab.core.io.rest.WebhookService;
 import org.openhab.core.items.Item;
 import org.openhab.core.items.ItemNotFoundException;
 import org.openhab.core.items.ItemRegistry;
@@ -66,11 +69,11 @@ import org.slf4j.LoggerFactory;
  * @author Kai Kreuzer - migrated code to new Jetty client and ESH APIs
  * @author Dan Cunningham - Extended notification enhancements
  */
-@Component(service = { CloudService.class, EventSubscriber.class,
-        ActionService.class }, configurationPid = "org.openhab.openhabcloud", property = Constants.SERVICE_PID
+@Component(service = { CloudService.class, EventSubscriber.class, ActionService.class,
+        WebhookService.class }, configurationPid = "org.openhab.openhabcloud", property = Constants.SERVICE_PID
                 + "=org.openhab.openhabcloud")
 @ConfigurableService(category = "io", label = "openHAB Cloud", description_uri = CloudService.CONFIG_URI)
-public class CloudService implements ActionService, CloudClientListener, EventSubscriber {
+public class CloudService implements ActionService, CloudClientListener, EventSubscriber, WebhookService {
 
     protected static final String CONFIG_URI = "io:openhabcloud";
 
@@ -323,6 +326,38 @@ public class CloudService implements ActionService, CloudClientListener, EventSu
         cloudClient.connect();
         cloudClient.setListener(this);
         NotificationAction.setCloudService(this);
+    }
+
+    @Override
+    public CompletableFuture<Webhook> requestWebhook(String localPath) {
+        CompletableFuture<Webhook> future = new CompletableFuture<>();
+        if (localPath.isBlank() || !localPath.startsWith("/")) {
+            future.completeExceptionally(new IllegalArgumentException("localPath must start with '/'"));
+            return future;
+        }
+        CloudClient client = cloudClient;
+        if (client != null) {
+            client.registerWebhook(localPath, future);
+        } else {
+            future.completeExceptionally(new IllegalStateException("Cloud connector is not initialized"));
+        }
+        return future;
+    }
+
+    @Override
+    public CompletableFuture<Void> removeWebhook(String localPath) {
+        CompletableFuture<Void> future = new CompletableFuture<>();
+        if (localPath.isBlank() || !localPath.startsWith("/")) {
+            future.completeExceptionally(new IllegalArgumentException("localPath must start with '/'"));
+            return future;
+        }
+        CloudClient client = cloudClient;
+        if (client != null) {
+            client.removeWebhook(localPath, future);
+        } else {
+            future.completeExceptionally(new IllegalStateException("Cloud connector is not initialized"));
+        }
+        return future;
     }
 
     @Override
