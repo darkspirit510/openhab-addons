@@ -61,16 +61,15 @@ public class BitmaskSensor extends Sensor {
     /**
      * Creates a new BitmaskSensor.
      *
-     * @param name the sensor name
      * @param id the sensor ID
      * @param type the sensor value type
      * @param channelId the base channel ID (used for the channel group)
      * @param channelToBitsMap mapping of channel IDs to their bit positions
      * @param validationBit the bit that must be set for constraints to be active
      */
-    public BitmaskSensor(String name, int id, SensorValueType type, String channelId,
-            Map<String, int[]> channelToBitsMap, int validationBit) {
-        super(name, id, type, channelId);
+    public BitmaskSensor(int id, SensorValueType type, String channelId, Map<String, int[]> channelToBitsMap,
+            int validationBit) {
+        super(id, type, channelId);
         this.channelToBitsMap = new HashMap<>(channelToBitsMap);
         this.validationBit = validationBit;
     }
@@ -78,15 +77,13 @@ public class BitmaskSensor extends Sensor {
     /**
      * Creates a new BitmaskSensor with default validation bit (45 for airflow constraints).
      *
-     * @param name the sensor name
      * @param id the sensor ID
      * @param type the sensor value type
      * @param channelId the base channel ID (used for the channel group)
      * @param channelToBitsMap mapping of channel IDs to their bit positions
      */
-    public BitmaskSensor(String name, int id, SensorValueType type, String channelId,
-            Map<String, int[]> channelToBitsMap) {
-        this(name, id, type, channelId, channelToBitsMap, 45);
+    public BitmaskSensor(int id, SensorValueType type, String channelId, Map<String, int[]> channelToBitsMap) {
+        this(id, type, channelId, channelToBitsMap, 45);
     }
 
     @Override
@@ -95,8 +92,8 @@ public class BitmaskSensor extends Sensor {
         // Instead, the handler will call processBitmaskUpdate to handle all channels.
         // We just extract and return the raw bitmask as a DecimalType for now.
         byte[] payload = message.getData().toByteArray();
-        long bitmask = extractSignedLong(payload);
-        return new org.openhab.core.library.types.DecimalType(bitmask);
+        double bitmask = extractSignedLong(payload);
+        return new org.openhab.core.library.types.DecimalType((long) bitmask);
     }
 
     /**
@@ -113,7 +110,7 @@ public class BitmaskSensor extends Sensor {
         boolean constraintsActive = (bitmask & (1L << validationBit)) != 0;
 
         if (!constraintsActive) {
-            logger.debug("{} constraints: validation bit {} not set, constraints inactive", name, validationBit);
+            logger.debug("{} constraints: validation bit {} not set, constraints inactive", channelId, validationBit);
             // Set all linked channels to OFF when constraints are inactive
             for (String channelId : linkedChannels) {
                 channelStates.put(channelId, OnOffType.OFF);
@@ -143,7 +140,7 @@ public class BitmaskSensor extends Sensor {
     public Sensor linkChannel(org.openhab.core.thing.Channel channel) {
         String channelId = channel.getUID().getId();
         linkedChannels.add(channelId);
-        logger.debug("Linked channel {} to bitmask sensor {}", channelId, name);
+        logger.debug("Linked channel {}", channelId);
         return this;
     }
 
@@ -155,7 +152,7 @@ public class BitmaskSensor extends Sensor {
     public void unlinkChannel(org.openhab.core.thing.Channel channel) {
         String channelId = channel.getUID().getId();
         linkedChannels.remove(channelId);
-        logger.debug("Unlinked channel {} from bitmask sensor {}", channelId, name);
+        logger.debug("Unlinked channel {}", channelId);
     }
 
     /**
@@ -210,21 +207,5 @@ public class BitmaskSensor extends Sensor {
             }
         }
         return false;
-    }
-
-    /**
-     * Extract a signed 64-bit integer value from the payload.
-     *
-     * @param payload the payload bytes
-     * @return the extracted signed long value
-     */
-    private long extractSignedLong(byte[] payload) {
-        if (payload.length >= 8) {
-            long value = ((payload[7] & 0xFFL) << 56) | ((payload[6] & 0xFFL) << 48) | ((payload[5] & 0xFFL) << 40)
-                    | ((payload[4] & 0xFFL) << 32) | ((payload[3] & 0xFFL) << 24) | ((payload[2] & 0xFFL) << 16)
-                    | ((payload[1] & 0xFFL) << 8) | (payload[0] & 0xFFL);
-            return value;
-        }
-        return 0;
     }
 }

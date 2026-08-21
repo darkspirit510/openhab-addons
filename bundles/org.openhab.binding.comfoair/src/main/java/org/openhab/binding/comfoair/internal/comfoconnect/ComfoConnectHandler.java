@@ -613,7 +613,7 @@ public class ComfoConnectHandler extends BaseThingHandler {
             if (isLinked(channel.getUID())) {
                 Sensors.sensorForChannel(channel).ifPresent(sensor -> {
                     logger.debug("Channel {} is linked at startup, subscribing to sensor {} ({})",
-                            channel.getUID().getId(), sensor.name, sensor.id);
+                            channel.getUID().getId(), sensor.channelId, sensor.id);
 
                     // Track that this sensor has at least one linked channel
                     subscribedSensors.add(sensor.id);

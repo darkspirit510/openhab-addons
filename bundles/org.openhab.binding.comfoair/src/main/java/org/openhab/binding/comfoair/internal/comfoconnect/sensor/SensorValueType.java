@@ -18,16 +18,16 @@ package org.openhab.binding.comfoair.internal.comfoconnect.sensor;
  * @author Sascha Knoop - Initial contribution
  */
 public enum SensorValueType {
-    TYPE_CN_BOOL(0x00),
-    TYPE_CN_UINT8(0x01),
-    TYPE_CN_UINT16(0x02),
-    TYPE_CN_UINT32(0x03),
-    TYPE_CN_INT8(0x05),
-    TYPE_CN_INT16(0x06),
-    TYPE_CN_INT64(0x08),
-    TYPE_CN_STRING(0x09),
-    TYPE_CN_TIME(0x10),
-    TYPE_CN_VERSION(0x11);
+    Boolean(0x00),
+    UnsignedByte(0x01),
+    UnsignedShort(0x02),
+    UnsignedInt(0x03),
+    SignedByte(0x05),
+    SignedShort(0x06),
+    SignedLong(0x08),
+    String(0x09),
+    Timestamp(0x10),
+    Version(0x11);
 
     public final int value;
 

@@ -28,8 +28,8 @@ import com.zehnder.proto.Zehnder;
 @NonNullByDefault
 public class BooleanSensor extends Sensor {
 
-    public BooleanSensor(String name, int id, SensorValueType type, String channelId) {
-        super(name, id, type, channelId);
+    public BooleanSensor(int id, SensorValueType type, String channelId) {
+        super(id, type, channelId);
     }
 
     @Override

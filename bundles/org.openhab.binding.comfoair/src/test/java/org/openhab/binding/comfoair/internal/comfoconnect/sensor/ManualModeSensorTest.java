@@ -23,36 +23,41 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.openhab.core.library.types.OnOffType;
+import org.openhab.core.library.types.StringType;
 
 import com.google.protobuf.ByteString;
 import com.zehnder.proto.Zehnder.CnRpdoNotification;
 
 /**
- * Tests for the BooleanSensor class.
+ * Unit tests for {@link ManualModeSensor} class.
  *
  * @author Sascha Knoop - Initial contribution
  */
 @NonNullByDefault
-class BooleanSensorTest {
+class ManualModeSensorTest {
 
-    private final BooleanSensor sensor = new BooleanSensor(210, SensorValueType.Boolean, "test-channel");
+    private final ManualModeSensor sensor = new ManualModeSensor(56, SensorValueType.SignedByte, "test-channel");
 
     @ParameterizedTest
-    @MethodSource("booleanValues")
-    @DisplayName("Returns expected boolean state for given input")
-    void testReturnsExpectedStateForGivenInput(byte[] payload, OnOffType expectedState) {
-        assertEquals(expectedState, sensor.valueAsState(messageFor(payload)));
+    @MethodSource("manualModeValues")
+    @DisplayName("Returns expected manual mode for given input")
+    void testReturnsExpectedModeForGivenInput(byte[] payload, String expectedMode) {
+        assertEquals(new StringType(expectedMode), sensor.valueAsState(messageFor(payload)));
     }
 
     private static CnRpdoNotification messageFor(byte[] payload) {
-        return CnRpdoNotification.newBuilder().setPdid(210).setData(ByteString.copyFrom(payload)).build();
+        return CnRpdoNotification.newBuilder().setPdid(56).setData(ByteString.copyFrom(payload)).build();
     }
 
-    private static Stream<Arguments> booleanValues() {
-        return Stream.of(Arguments.of(new byte[] { 0x00 }, OnOffType.OFF),
-                Arguments.of(new byte[] { 0x01 }, OnOffType.ON), Arguments.of(new byte[] { 0x0A }, OnOffType.ON),
-                Arguments.of(new byte[] { (byte) 0xFF }, OnOffType.ON));
+    private static Stream<Arguments> manualModeValues() {
+        return Stream.of(Arguments.of(new byte[] { (byte) 0xFF }, "auto"),
+                Arguments.of(new byte[] { 0x01 }, "unlimited_manual"));
+    }
+
+    @Test
+    @DisplayName("Returns null for unknown manual mode value")
+    void testReturnsNullForUnknownMode() {
+        assertNull(sensor.valueAsState(messageFor(new byte[] { 0x00 })));
     }
 
     @Test

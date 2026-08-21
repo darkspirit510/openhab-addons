@@ -202,7 +202,6 @@ public class ComfoConnectDiscoveryService extends AbstractDiscoveryService {
      *
      * @param response DiscoveryResponse
      */
-
     private void createDiscoveryResult(DiscoveryResponse response) {
         ThingTypeUID thingTypeUID = ComfoAirBindingConstants.THING_TYPE_COMFOCONNECT_LAN;
         String uuidSuffix = extractUuidSuffix(response.getUuid());

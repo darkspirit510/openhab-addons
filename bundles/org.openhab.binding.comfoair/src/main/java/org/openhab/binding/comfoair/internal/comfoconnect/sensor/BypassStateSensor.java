@@ -31,8 +31,8 @@ import com.zehnder.proto.Zehnder;
 @NonNullByDefault
 public class BypassStateSensor extends Sensor {
 
-    public BypassStateSensor(String name, int id, SensorValueType type, String channelId) {
-        super(name, id, type, channelId);
+    public BypassStateSensor(int id, SensorValueType type, String channelId) {
+        super(id, type, channelId);
     }
 
     @Override

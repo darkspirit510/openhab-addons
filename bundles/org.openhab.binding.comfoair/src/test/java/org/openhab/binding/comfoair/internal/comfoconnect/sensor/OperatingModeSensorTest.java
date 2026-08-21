@@ -23,36 +23,43 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.openhab.core.library.types.OnOffType;
+import org.openhab.core.library.types.StringType;
 
 import com.google.protobuf.ByteString;
 import com.zehnder.proto.Zehnder.CnRpdoNotification;
 
 /**
- * Tests for the BooleanSensor class.
+ * Unit tests for {@link OperatingModeSensor} class.
  *
  * @author Sascha Knoop - Initial contribution
  */
 @NonNullByDefault
-class BooleanSensorTest {
+class OperatingModeSensorTest {
 
-    private final BooleanSensor sensor = new BooleanSensor(210, SensorValueType.Boolean, "test-channel");
+    private final OperatingModeSensor sensor = new OperatingModeSensor(49, SensorValueType.SignedByte, "test-channel");
 
     @ParameterizedTest
-    @MethodSource("booleanValues")
-    @DisplayName("Returns expected boolean state for given input")
-    void testReturnsExpectedStateForGivenInput(byte[] payload, OnOffType expectedState) {
-        assertEquals(expectedState, sensor.valueAsState(messageFor(payload)));
+    @MethodSource("operatingModeValues")
+    @DisplayName("Returns expected operating mode for given input")
+    void testReturnsExpectedModeForGivenInput(byte[] payload, String expectedMode) {
+        assertEquals(new StringType(expectedMode), sensor.valueAsState(messageFor(payload)));
     }
 
     private static CnRpdoNotification messageFor(byte[] payload) {
-        return CnRpdoNotification.newBuilder().setPdid(210).setData(ByteString.copyFrom(payload)).build();
+        return CnRpdoNotification.newBuilder().setPdid(49).setData(ByteString.copyFrom(payload)).build();
     }
 
-    private static Stream<Arguments> booleanValues() {
-        return Stream.of(Arguments.of(new byte[] { 0x00 }, OnOffType.OFF),
-                Arguments.of(new byte[] { 0x01 }, OnOffType.ON), Arguments.of(new byte[] { 0x0A }, OnOffType.ON),
-                Arguments.of(new byte[] { (byte) 0xFF }, OnOffType.ON));
+    private static Stream<Arguments> operatingModeValues() {
+        return Stream.of(Arguments.of(new byte[] { (byte) 0xFF }, "auto"),
+                Arguments.of(new byte[] { 0x01 }, "limited_manual"),
+                Arguments.of(new byte[] { 0x05 }, "unlimited_manual"), Arguments.of(new byte[] { 0x06 }, "boost"),
+                Arguments.of(new byte[] { 0x0B }, "away"));
+    }
+
+    @Test
+    @DisplayName("Returns null for unknown operating mode value")
+    void testReturnsNullForUnknownMode() {
+        assertNull(sensor.valueAsState(messageFor(new byte[] { 0x00 })));
     }
 
     @Test

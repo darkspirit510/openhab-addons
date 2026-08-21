@@ -45,8 +45,8 @@ class BitmaskSensorTest {
         channelToBitsMap.put("resistance", new int[] { 2, 3 });
         channelToBitsMap.put("frostProtection", new int[] { 9 });
 
-        BitmaskSensor sensor = new BitmaskSensor("Airflow Constraints", 230, SensorValueType.TYPE_CN_INT64,
-                "airflowConstraints", channelToBitsMap);
+        BitmaskSensor sensor = new BitmaskSensor(230, SensorValueType.SignedLong, "airflowConstraints",
+                channelToBitsMap);
 
         // Create a bitmask with bit 45 set (validation bit) and bit 9 set (frostProtection)
         long bitmask = (1L << 45) | (1L << 9);
@@ -68,8 +68,8 @@ class BitmaskSensorTest {
         channelToBitsMap.put("resistance", new int[] { 2, 3 });
         channelToBitsMap.put("frostProtection", new int[] { 9 });
 
-        BitmaskSensor sensor = new BitmaskSensor("Airflow Constraints", 230, SensorValueType.TYPE_CN_INT64,
-                "airflowConstraints", channelToBitsMap);
+        BitmaskSensor sensor = new BitmaskSensor(230, SensorValueType.SignedLong, "airflowConstraints",
+                channelToBitsMap);
 
         // Simulate linked channels by directly setting the linkedChannels set
         // This is a test-only approach to verify the logic without complex mocking
@@ -102,8 +102,8 @@ class BitmaskSensorTest {
         channelToBitsMap.put("resistance", new int[] { 2, 3 });
         channelToBitsMap.put("frostProtection", new int[] { 9 });
 
-        BitmaskSensor sensor = new BitmaskSensor("Airflow Constraints", 230, SensorValueType.TYPE_CN_INT64,
-                "airflowConstraints", channelToBitsMap);
+        BitmaskSensor sensor = new BitmaskSensor(230, SensorValueType.SignedLong, "airflowConstraints",
+                channelToBitsMap);
 
         // Simulate linked channels
         Set<String> linkedChannels = new HashSet<>();
@@ -134,8 +134,8 @@ class BitmaskSensorTest {
         channelToBitsMap.put("resistance", new int[] { 2, 3 }); // OR logic - ON if either bit 2 or 3 is set
         channelToBitsMap.put("frostProtection", new int[] { 9 });
 
-        BitmaskSensor sensor = new BitmaskSensor("Airflow Constraints", 230, SensorValueType.TYPE_CN_INT64,
-                "airflowConstraints", channelToBitsMap);
+        BitmaskSensor sensor = new BitmaskSensor(230, SensorValueType.SignedLong, "airflowConstraints",
+                channelToBitsMap);
 
         // Simulate linked channels
         Set<String> linkedChannels = new HashSet<>();
@@ -174,8 +174,8 @@ class BitmaskSensorTest {
         channelToBitsMap.put("resistance", new int[] { 2, 3 });
         channelToBitsMap.put("frostProtection", new int[] { 9 });
 
-        BitmaskSensor sensor = new BitmaskSensor("Airflow Constraints", 230, SensorValueType.TYPE_CN_INT64,
-                "airflowConstraints", channelToBitsMap);
+        BitmaskSensor sensor = new BitmaskSensor(230, SensorValueType.SignedLong, "airflowConstraints",
+                channelToBitsMap);
 
         // Simulate linked channels
         Set<String> linkedChannels = new HashSet<>();
@@ -203,8 +203,8 @@ class BitmaskSensorTest {
     @DisplayName("Test isAnyBitSet method")
     void testIsAnyBitSet() {
         Map<String, int[]> channelToBitsMap = new HashMap<>();
-        BitmaskSensor sensor = new BitmaskSensor("Airflow Constraints", 230, SensorValueType.TYPE_CN_INT64,
-                "airflowConstraints", channelToBitsMap);
+        BitmaskSensor sensor = new BitmaskSensor(230, SensorValueType.SignedLong, "airflowConstraints",
+                channelToBitsMap);
 
         long bitmask = (1L << 2) | (1L << 5);
 
@@ -226,8 +226,8 @@ class BitmaskSensorTest {
         channelToBitsMap.put("resistance", new int[] { 2, 3 });
         channelToBitsMap.put("frostProtection", new int[] { 9 });
 
-        BitmaskSensor sensor = new BitmaskSensor("Airflow Constraints", 230, SensorValueType.TYPE_CN_INT64,
-                "airflowConstraints", channelToBitsMap);
+        BitmaskSensor sensor = new BitmaskSensor(230, SensorValueType.SignedLong, "airflowConstraints",
+                channelToBitsMap);
 
         // Test getting bits for existing channels
         assertTrue(Arrays.equals(new int[] { 2, 3 }, sensor.getBitsForChannel("resistance")));
