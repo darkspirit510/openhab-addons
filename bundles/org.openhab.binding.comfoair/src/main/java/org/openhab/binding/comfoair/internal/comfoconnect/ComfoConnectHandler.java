@@ -65,7 +65,7 @@ public class ComfoConnectHandler extends BaseThingHandler {
 
     private final Logger logger = LoggerFactory.getLogger(ComfoConnectHandler.class);
 
-    private @Nullable ComfoConnectTcpConnector connector;
+    private @Nullable ComfoConnectConnector connector;
     private @Nullable ComfoConnectProtocolHandler protocolHandler;
     private @Nullable ScheduledFuture<?> connectionRetryTask;
     private @Nullable Future<?> messageConsumerTask;
@@ -155,7 +155,7 @@ public class ComfoConnectHandler extends BaseThingHandler {
             }
         }
 
-        ComfoConnectTcpConnector connector = new ComfoConnectTcpConnector(hostname,
+        ComfoConnectConnector connector = new ComfoConnectConnector(hostname,
                 ComfoAirBindingConstants.COMFOCONNECT_DEFAULT_PORT, clientUuid, gatewayUuid);
         this.connector = connector;
 
@@ -183,7 +183,7 @@ public class ComfoConnectHandler extends BaseThingHandler {
      * Attempt to connect and authenticate with the gateway.
      */
     private void connect() {
-        ComfoConnectTcpConnector connector = this.connector;
+        ComfoConnectConnector connector = this.connector;
         ComfoConnectProtocolHandler protocolHandler = this.protocolHandler;
 
         if (connector == null || protocolHandler == null) {
@@ -269,10 +269,10 @@ public class ComfoConnectHandler extends BaseThingHandler {
      * This task runs in the background and continuously polls for messages from the connector's queue,
      * then dispatches them to the protocol handler for processing.
      *
-     * @param connector the TCP connector with queued messages
+     * @param connector the connector with queued messages
      * @param protocolHandler the protocol handler to process messages
      */
-    private void startMessageConsumer(final ComfoConnectTcpConnector connector,
+    private void startMessageConsumer(final ComfoConnectConnector connector,
             final ComfoConnectProtocolHandler protocolHandler) {
         logger.debug("Starting message consumer loop");
 
@@ -322,7 +322,7 @@ public class ComfoConnectHandler extends BaseThingHandler {
             protocolHandler.shutdown();
         }
 
-        ComfoConnectTcpConnector connector = this.connector;
+        ComfoConnectConnector connector = this.connector;
 
         if (connector != null) {
             connector.disconnect();
@@ -454,7 +454,7 @@ public class ComfoConnectHandler extends BaseThingHandler {
      * @return true if connected, false otherwise
      */
     public boolean isConnected() {
-        ComfoConnectTcpConnector connector = this.connector;
+        ComfoConnectConnector connector = this.connector;
         return connector != null && connector.isConnected();
     }
 

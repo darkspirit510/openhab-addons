@@ -12,29 +12,43 @@
  */
 package org.openhab.binding.comfoair.internal.comfoconnect;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.EOFException;
 import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.Socket;
+import java.net.SocketException;
+import java.net.SocketTimeoutException;
+import java.nio.ByteBuffer;
+import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
+import org.openhab.binding.comfoair.internal.comfoconnect.sensor.Sensors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.zehnder.proto.Zehnder;
+
 /**
- * Abstract base class for ComfoConnect connector implementations supporting multiple connection types
- * (TCP socket-based for newer Q-series devices).
+ * TCP socket-based connector for ComfoConnect protocol (newer Q-series devices).
  *
- * Provides:
+ * Manages:
+ * - TCP socket connection to gateway
+ * - Asynchronous message reading via reader thread
+ * - Socket lifecycle with responsive shutdown via interrupt
  * - Asynchronous message handling via BlockingQueue
  * - Single reader thread with responsive shutdown via interrupt() + join()
- * - Message framing and protocol handling abstraction
+ * - Message framing and protocol handling
  * - Connection lifecycle management
  *
  * @author Sascha Knoop - Initial contribution
  */
 @NonNullByDefault
-public abstract class ComfoConnectConnector {
+public class ComfoConnectConnector {
 
     private final Logger logger = LoggerFactory.getLogger(ComfoConnectConnector.class);
 
@@ -48,24 +62,82 @@ public abstract class ComfoConnectConnector {
     protected @Nullable Thread readerThread;
     protected final Object readerThreadLock = new Object();
 
-    protected ComfoConnectConnector() {
-        this(DEFAULT_QUEUE_CAPACITY);
+    private final String hostname;
+    private final int port;
+    private final UUID clientUuid;
+    private final UUID gatewayUuid;
+
+    private @Nullable Socket socket;
+    private @Nullable DataInputStream inputStream;
+    private @Nullable DataOutputStream outputStream;
+    private final ProtobufFramer framer;
+
+    /**
+     * Create a new TCP connector.
+     *
+     * @param hostname the gateway hostname or IP address
+     * @param port the gateway TCP port (default 56747)
+     * @param clientUuid the client UUID (random, use for identification)
+     * @param gatewayUuid the gateway UUID
+     */
+    public ComfoConnectConnector(final String hostname, final int port, final UUID clientUuid, final UUID gatewayUuid) {
+        this(hostname, port, clientUuid, gatewayUuid, DEFAULT_QUEUE_CAPACITY);
     }
 
-    protected ComfoConnectConnector(final int queueCapacity) {
+    /**
+     * Create a new TCP connector with custom queue capacity.
+     *
+     * @param hostname the gateway hostname or IP address
+     * @param port the gateway TCP port (default 56747)
+     * @param clientUuid the client UUID (random, use for identification)
+     * @param gatewayUuid the gateway UUID
+     * @param queueCapacity the message queue capacity
+     */
+    public ComfoConnectConnector(final String hostname, final int port, final UUID clientUuid, final UUID gatewayUuid,
+            final int queueCapacity) {
         this.messageQueue = new LinkedBlockingQueue<>(queueCapacity);
+        this.hostname = hostname;
+        this.port = port;
+        this.clientUuid = clientUuid;
+        this.gatewayUuid = gatewayUuid;
+        this.framer = new ProtobufFramer(clientUuid, gatewayUuid);
     }
 
     /**
      * Establish connection to the ComfoConnect gateway.
      * This method is responsible for:
-     * - Connecting to the physical transport (socket, serial, etc.)
+     * - Connecting to the physical transport (socket)
      * - Starting the reader thread
      * - Performing any necessary handshaking or authentication
      *
      * @throws IOException if connection fails
      */
-    public abstract void connect() throws IOException;
+    public void connect() throws IOException {
+        logger.info("Connecting to ComfoConnect gateway at {}:{}", hostname, port);
+
+        try {
+            Socket socket = new Socket();
+            socket.setSoTimeout(SOCKET_TIMEOUT_MS);
+            socket.connect(new InetSocketAddress(hostname, port), 5000);
+
+            DataInputStream inputStream = new DataInputStream(socket.getInputStream());
+            DataOutputStream outputStream = new DataOutputStream(socket.getOutputStream());
+
+            this.socket = socket;
+            this.inputStream = inputStream;
+            this.outputStream = outputStream;
+            this.isConnected = true;
+
+            logger.info("Connected to ComfoConnect gateway");
+
+            startReaderThread(this::readLoop, "ComfoConnect-Reader");
+        } catch (IOException e) {
+            logger.error("Failed to connect to ComfoConnect gateway: {}", e.getMessage());
+            isConnected = false;
+            cleanup();
+            throw e;
+        }
+    }
 
     /**
      * Gracefully close the connection.
@@ -73,7 +145,14 @@ public abstract class ComfoConnectConnector {
      * - Stopping the reader thread
      * - Closing any underlying resources (sockets, streams)
      */
-    public abstract void disconnect();
+    public void disconnect() {
+        logger.info("Disconnecting from ComfoConnect gateway");
+        isShutdown = true;
+        stopReaderThread();
+        cleanup();
+        isConnected = false;
+        logger.info("Disconnected from ComfoConnect gateway");
+    }
 
     /**
      * Send a message (raw bytes or protobuf) to the gateway.
@@ -81,7 +160,25 @@ public abstract class ComfoConnectConnector {
      * @param message the message to send
      * @throws IOException if send fails
      */
-    public abstract void sendMessage(byte[] message) throws IOException;
+    public void sendMessage(final byte[] message) throws IOException {
+        DataOutputStream out = this.outputStream;
+        if (out == null || socket == null || !isConnected) {
+            throw new IOException("Not connected to gateway");
+        }
+
+        synchronized (out) {
+            try {
+                out.write(message);
+                out.flush();
+                logger.debug("Sent {} bytes to gateway", message.length);
+            } catch (IOException e) {
+                logger.error("Error sending message: {}", e.getMessage());
+                isConnected = false;
+                cleanup();
+                throw e;
+            }
+        }
+    }
 
     /**
      * Send an RPDO request to subscribe to a sensor.
@@ -90,7 +187,32 @@ public abstract class ComfoConnectConnector {
      * @param type the sensor data type
      * @throws IOException if send fails
      */
-    public abstract void sendRpdoRequest(int pdid, int type) throws IOException;
+    public void sendRpdoRequest(final int pdid, final int type) throws IOException {
+        logger.debug("sendRpdoRequest called: pdid={}, type={}", pdid, type);
+
+        try {
+            Zehnder.CnRpdoRequest.Builder rpdoBuilder = Zehnder.CnRpdoRequest.newBuilder();
+            rpdoBuilder.setPdid(pdid);
+            rpdoBuilder.setType(type);
+            rpdoBuilder.setZone(1); // Zone must be set to 1, matching aiocomfoconnect
+            logger.debug("Built CnRpdoRequest: pdid={}, type={}, zone={}", pdid, type, 1);
+
+            byte[] frame = getFramer().createFrame(
+                    Zehnder.GatewayOperation.newBuilder()
+                            .setType(Zehnder.GatewayOperation.OperationType.CnRpdoRequestType).build(),
+                    rpdoBuilder.build());
+
+            logger.debug("Created RPDO request frame, length={} bytes", frame.length);
+            sendMessage(frame);
+            Sensors.findById(pdid).ifPresentOrElse(sensor -> logger.info("RPDO request sent for sensor {}", sensor),
+                    () -> logger.info("RPDO request sent for sensor ??? ({})", pdid));
+        } catch (IOException e) {
+            logger.error("Failed to send RPDO request: {}", e.getMessage());
+            isConnected = false;
+            cleanup();
+            throw e;
+        }
+    }
 
     /**
      * Send an RPDO request to unsubscribe from a sensor.
@@ -100,7 +222,35 @@ public abstract class ComfoConnectConnector {
      * @param pdid the PDO ID of the sensor to unsubscribe from
      * @throws IOException if send fails
      */
-    public abstract void sendRpdoUnsubscribe(int pdid) throws IOException;
+    public void sendRpdoUnsubscribe(final int pdid) throws IOException {
+        logger.debug("sendRpdoUnsubscribe called: pdid={}", pdid);
+
+        try {
+            // To unsubscribe, send a CnRpdoRequest without the type field
+            // According to the protocol: "when no type is specified, a previously registered RPDO with given PDID is
+            // deleted"
+            Zehnder.CnRpdoRequest.Builder rpdoBuilder = Zehnder.CnRpdoRequest.newBuilder();
+            rpdoBuilder.setPdid(pdid);
+            rpdoBuilder.setZone(1); // Zone must be set to 1, matching aiocomfoconnect
+            // Note: We do NOT set the type field - this is what triggers the unsubscribe
+            logger.debug("Built CnRpdoRequest for unsubscribe: pdid={}, zone={}", pdid, 1);
+
+            byte[] frame = getFramer().createFrame(
+                    Zehnder.GatewayOperation.newBuilder()
+                            .setType(Zehnder.GatewayOperation.OperationType.CnRpdoRequestType).build(),
+                    rpdoBuilder.build());
+
+            logger.debug("Created RPDO unsubscribe frame, length={} bytes", frame.length);
+            sendMessage(frame);
+            Sensors.findById(pdid).ifPresentOrElse(sensor -> logger.info("RPDO unsubscribe sent for sensor {}", sensor),
+                    () -> logger.info("RPDO unsubscribe sent for sensor ??? ({})", pdid));
+        } catch (IOException e) {
+            logger.error("Failed to send RPDO unsubscribe: {}", e.getMessage());
+            isConnected = false;
+            cleanup();
+            throw e;
+        }
+    }
 
     /**
      * Send an RMI request to the gateway.
@@ -109,11 +259,159 @@ public abstract class ComfoConnectConnector {
      * @param rmiMessage the raw RMI message bytes (e.g., 0x83, UNIT, SUBUNIT, PROPERTY)
      * @throws IOException if send fails
      */
-    public abstract void sendRmiRequest(int nodeId, byte[] rmiMessage) throws IOException;
+    public void sendRmiRequest(final int nodeId, final byte[] rmiMessage) throws IOException {
+        logger.debug("sendRmiRequest called: nodeId={}, rmiMessage length={}", nodeId, rmiMessage.length);
 
-    public abstract ProtobufFramer getFramer();
+        try {
+            Zehnder.CnRmiRequest.Builder rmiBuilder = Zehnder.CnRmiRequest.newBuilder();
+            rmiBuilder.setNodeId(nodeId);
+            rmiBuilder.setMessage(com.google.protobuf.ByteString.copyFrom(rmiMessage));
+            logger.debug("Built CnRmiRequest: nodeId={}, message={}", nodeId, bytesToHex(rmiMessage));
 
-    public abstract java.util.UUID getClientUuid();
+            byte[] frame = getFramer().createFrame(
+                    Zehnder.GatewayOperation.newBuilder()
+                            .setType(Zehnder.GatewayOperation.OperationType.CnRmiRequestType).build(),
+                    rmiBuilder.build());
+
+            logger.debug("Created RMI request frame, length={} bytes", frame.length);
+            sendMessage(frame);
+            logger.info("RMI request sent for node {}: {}", nodeId, bytesToHex(rmiMessage));
+        } catch (IOException e) {
+            logger.error("Failed to send RMI request: {}", e.getMessage());
+            isConnected = false;
+            cleanup();
+            throw e;
+        }
+    }
+
+    /**
+     * Convert bytes to hexadecimal string for logging.
+     *
+     * @param bytes the bytes to convert
+     * @return hex string representation
+     */
+    private String bytesToHex(final byte[] bytes) {
+        StringBuilder sb = new StringBuilder();
+        for (byte b : bytes) {
+            sb.append(String.format("%02X ", b & 0xFF));
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Main reader loop running in dedicated thread.
+     * Reads complete frames from the socket and queues them for consumers.
+     */
+    private void readLoop() {
+        DataInputStream in = this.inputStream;
+        if (in == null) {
+            logger.error("Input stream not initialized");
+            return;
+        }
+
+        logger.info("Reader loop started, waiting for messages from gateway");
+        try {
+            while (!Thread.currentThread().isInterrupted() && isConnected) {
+                try {
+                    logger.debug("Attempting to read next message from gateway...");
+                    int totalLength = in.readInt();
+
+                    if (totalLength < 0 || totalLength > 65536) {
+                        logger.warn("Invalid frame length: {}", totalLength);
+                        break;
+                    }
+
+                    byte[] frameData = new byte[4 + totalLength];
+                    ByteBuffer lengthBuffer = ByteBuffer.wrap(frameData, 0, 4);
+                    lengthBuffer.putInt(totalLength);
+
+                    in.readFully(frameData, 4, totalLength);
+
+                    if (!queueMessage(frameData)) {
+                        logger.warn("Message queue full, dropping message");
+                    }
+
+                    logger.trace("Received {} bytes", frameData.length);
+
+                } catch (SocketTimeoutException e) {
+                    // Socket timeout is normal - just continue waiting for data
+                    logger.debug("Socket timeout while reading ({}ms), retrying...", SOCKET_TIMEOUT_MS);
+                    continue;
+                } catch (SocketException e) {
+                    if (Thread.currentThread().isInterrupted()) {
+                        logger.debug("Reader interrupted (SocketException): {}", e.getMessage());
+                        break;
+                    } else {
+                        logger.error("Socket error: {}", e.getMessage());
+                        isConnected = false;
+                        break;
+                    }
+                }
+            }
+        } catch (EOFException e) {
+            logger.info("Gateway closed connection");
+            isConnected = false;
+        } catch (IOException e) {
+            if (!Thread.currentThread().isInterrupted()) {
+                logger.error("I/O error in reader loop: {}", e.getMessage());
+                isConnected = false;
+            } else {
+                logger.debug("Reader loop interrupted");
+            }
+        } finally {
+            logger.debug("Reader loop exiting");
+        }
+    }
+
+    /**
+     * Clean up socket resources.
+     */
+    private void cleanup() {
+        clearQueue();
+
+        DataInputStream in = this.inputStream;
+        if (in != null) {
+            try {
+                in.close();
+            } catch (IOException e) {
+                logger.debug("Error closing input stream: {}", e.getMessage());
+            }
+        }
+
+        DataOutputStream out = this.outputStream;
+        if (out != null) {
+            try {
+                out.close();
+            } catch (IOException e) {
+                logger.debug("Error closing output stream: {}", e.getMessage());
+            }
+        }
+
+        Socket sock = this.socket;
+        if (sock != null) {
+            try {
+                sock.close();
+            } catch (IOException e) {
+                logger.debug("Error closing socket: {}", e.getMessage());
+            }
+        }
+
+        this.socket = null;
+        this.inputStream = null;
+        this.outputStream = null;
+    }
+
+    public ProtobufFramer getFramer() {
+        return framer;
+    }
+
+    public UUID getClientUuid() {
+        return clientUuid;
+    }
+
+    public UUID getGatewayUuid() {
+        return gatewayUuid;
+    }
 
     /**
      * Get next message from the queue (blocking).

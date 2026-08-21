@@ -44,7 +44,7 @@ public class DecimalSensor extends Sensor {
     @Override
     public @Nullable State valueAsState(Zehnder.CnRpdoNotification message) {
         byte[] payload = message.getData().toByteArray();
-        double rawValue = (double) extractValueFrom(payload);
+        double rawValue = extractValueFrom(payload).doubleValue();
         double transformedValue = transformation.transform(rawValue);
 
         logger.debug("Sensor {}: raw={}, transformed={}, payload_hex={}", channelId, rawValue, transformedValue,

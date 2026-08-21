@@ -19,7 +19,7 @@ import java.util.UUID;
  *
  * @author Sascha Knoop - Initial contribution
  */
-public class TestComfoConnectConnector extends ComfoConnectTcpConnector {
+public class TestComfoConnectConnector extends ComfoConnectConnector {
 
     private byte[] nextCommand = new byte[0];
     private byte[] nextPayload = new byte[0];
