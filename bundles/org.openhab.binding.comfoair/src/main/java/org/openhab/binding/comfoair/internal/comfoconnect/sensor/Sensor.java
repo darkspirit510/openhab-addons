@@ -14,6 +14,7 @@ package org.openhab.binding.comfoair.internal.comfoconnect.sensor;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
+import org.openhab.binding.comfoair.internal.comfoconnect.misc.HexConverter;
 import org.openhab.core.thing.Channel;
 import org.openhab.core.types.State;
 
@@ -27,6 +28,7 @@ import com.zehnder.proto.Zehnder;
  */
 @NonNullByDefault
 public abstract class Sensor {
+    protected final HexConverter hexConverter = new HexConverter();
 
     public int id;
 
@@ -172,10 +174,6 @@ public abstract class Sensor {
      * @return hex string representation
      */
     protected String bytesToHex(byte[] bytes) {
-        StringBuilder sb = new StringBuilder();
-        for (byte b : bytes) {
-            sb.append(String.format("%02X", b & 0xFF)).append(" ");
-        }
-        return sb.toString().trim();
+        return hexConverter.toHex(bytes);
     }
 }

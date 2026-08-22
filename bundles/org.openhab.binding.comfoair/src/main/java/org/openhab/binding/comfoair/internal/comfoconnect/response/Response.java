@@ -12,9 +12,11 @@
  */
 package org.openhab.binding.comfoair.internal.comfoconnect.response;
 
-import java.util.UUID;
+import org.openhab.binding.comfoair.internal.comfoconnect.misc.UuidConverter;
 
 public abstract class Response {
+    private static final UuidConverter uuidConverter = new UuidConverter();
+
     /**
      * Convert 16 bytes to a UUID string.
      *
@@ -22,20 +24,6 @@ public abstract class Response {
      * @return the UUID as a string
      */
     protected static String bytesToUuid(byte[] bytes) {
-        if (bytes.length != 16) {
-            throw new IllegalArgumentException("UUID bytes must be 16 bytes long");
-        }
-
-        long most = 0;
-        long least = 0;
-
-        for (int i = 0; i < 8; i++) {
-            most = (most << 8) | (bytes[i] & 0xFF);
-            least = (least << 8) | (bytes[8 + i] & 0xFF);
-        }
-
-        UUID uuid = new UUID(most, least);
-
-        return uuid.toString();
+        return uuidConverter.fromBytes(bytes).toString();
     }
 }

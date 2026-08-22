@@ -19,6 +19,7 @@ import java.util.UUID;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.openhab.binding.comfoair.internal.comfoconnect.RequestExecutor;
+import org.openhab.binding.comfoair.internal.comfoconnect.misc.UuidConverter;
 
 import com.zehnder.proto.Zehnder;
 
@@ -28,6 +29,7 @@ import com.zehnder.proto.Zehnder;
  */
 @NonNullByDefault
 public class ListRegisteredAppsUseCase {
+    private final UuidConverter uuidConverter = new UuidConverter();
 
     private final RequestExecutor requestExecutor;
 
@@ -85,10 +87,6 @@ public class ListRegisteredAppsUseCase {
      * @return UUID object
      */
     private UUID bytesToUuid(final byte[] bytes) {
-        java.nio.ByteBuffer bb = java.nio.ByteBuffer.wrap(bytes);
-        long high = bb.getLong();
-        long low = bb.getLong();
-
-        return new UUID(high, low);
+        return uuidConverter.fromBytes(bytes);
     }
 }

@@ -13,7 +13,6 @@
 package org.openhab.binding.comfoair.internal.comfoconnect;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -27,8 +26,11 @@ import java.util.concurrent.TimeoutException;
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.comfoair.internal.ComfoAirBindingConstants;
+import org.openhab.binding.comfoair.internal.comfoconnect.misc.HexConverter;
+import org.openhab.binding.comfoair.internal.comfoconnect.misc.ParsedFrame;
 import org.openhab.binding.comfoair.internal.comfoconnect.misc.PendingRequest;
 import org.openhab.binding.comfoair.internal.comfoconnect.misc.SensorDataCallback;
+import org.openhab.binding.comfoair.internal.comfoconnect.misc.UuidConverter;
 import org.openhab.binding.comfoair.internal.comfoconnect.response.Payload;
 import org.openhab.binding.comfoair.internal.comfoconnect.sensor.Sensor;
 import org.openhab.binding.comfoair.internal.comfoconnect.sensor.SensorValueType;
@@ -70,6 +72,8 @@ public class ComfoConnectProtocolHandler {
     private final ScheduledExecutorService scheduler;
     private final int pinCode;
     private final boolean autoTakeover;
+    private final UuidConverter uuidConverter = new UuidConverter();
+    private final HexConverter hexConverter = new HexConverter();
 
     private @Nullable SensorDataCallback sensorCallback;
     private @Nullable Runnable onKeepAliveFailure;
@@ -270,14 +274,14 @@ public class ComfoConnectProtocolHandler {
         logger.info("Received message: {} bytes, first byte: 0x{}", frame.length, String.format("%02X", frame[0]));
 
         try {
-            ProtobufFramer.ParsedFrame parsed = connector.getFramer().parseFrame(frame);
+            ParsedFrame parsed = connector.getFramer().parseFrame(frame);
 
             if (parsed == null) {
                 logger.warn("Failed to parse frame");
                 return;
             }
 
-            GatewayOperation operation = GatewayOperation.parseFrom(parsed.command);
+            GatewayOperation operation = GatewayOperation.parseFrom(parsed.command());
             logger.info("Received operation: type={}, reference={}, result={}", operation.getType(),
                     operation.getReference(), operation.getResult());
 
@@ -285,7 +289,7 @@ public class ComfoConnectProtocolHandler {
                 logger.warn("Gateway returned error: {} - {}", operation.getResult(), operation.getResultDescription());
             }
 
-            Payload payload = new Payload(parsed.payload);
+            Payload payload = new Payload(parsed.payload());
 
             switch (operation.getType()) {
                 case KeepAliveType:
@@ -302,21 +306,21 @@ public class ComfoConnectProtocolHandler {
 
                 case CnNodeNotificationType:
                     logger.info("Handling node notification: type={}, payload length={}", operation.getType(),
-                            parsed.payload.length);
+                            parsed.payload().length);
                     handleNodeNotification(payload);
                     break;
 
                 case CnRpdoNotificationType:
                 case CnAlarmNotificationType:
                     logger.info("Handling notification: type={}, payload length={}", operation.getType(),
-                            parsed.payload.length);
+                            parsed.payload().length);
                     handleNotification(operation, payload);
                     break;
 
                 case CnRmiResponseType:
                 case CnRmiAsyncResponseType:
                     logger.info("Handling RMI response: type={}, payload length={}", operation.getType(),
-                            parsed.payload.length);
+                            parsed.payload().length);
                     handleRmiResponse(operation, payload);
                     break;
 
@@ -388,7 +392,7 @@ public class ComfoConnectProtocolHandler {
         logger.debug("Registering app with gateway");
 
         Zehnder.RegisterAppRequest.Builder builder = Zehnder.RegisterAppRequest.newBuilder();
-        builder.setUuid(com.google.protobuf.ByteString.copyFrom(uuidToBytes(connector.getClientUuid())));
+        builder.setUuid(com.google.protobuf.ByteString.copyFrom(uuidConverter.toBytes(connector.getClientUuid())));
         builder.setPin(pinCode);
         builder.setDevicename("openHAB");
 
@@ -760,7 +764,7 @@ public class ComfoConnectProtocolHandler {
     private void handleRpdoNotification(final Payload payload) {
         try {
             logger.debug("handleRpdoNotification: payload length={}, hex={}", payload.length,
-                    bytesToHex(payload.content));
+                    hexConverter.toHex(payload.content));
 
             // Parse the payload as a protobuf CnRpdoNotification message
             Zehnder.CnRpdoNotification notification = Zehnder.CnRpdoNotification.parseFrom(payload.content);
@@ -768,7 +772,7 @@ public class ComfoConnectProtocolHandler {
             int sensorId = notification.getPdid();
             byte[] dataBytes = notification.getData().toByteArray();
             logger.debug("Parsed RPDO: pdid={}, data length={}, data hex={}", sensorId, dataBytes.length,
-                    bytesToHex(dataBytes));
+                    hexConverter.toHex(dataBytes));
 
             Sensor sensor = Sensors.findById(sensorId).orElse(null);
 
@@ -788,23 +792,6 @@ public class ComfoConnectProtocolHandler {
         } catch (Exception e) {
             logger.error("Error handling RPDO notification: {}", e.getMessage(), e);
         }
-    }
-
-    /**
-     * Convert byte array to hex string for debugging.
-     *
-     * @param bytes the byte array to convert
-     * @return hex string representation
-     */
-    private static String bytesToHex(byte[] bytes) {
-        StringBuilder hexString = new StringBuilder();
-
-        for (byte b : bytes) {
-            String hex = String.format("%02X", b);
-            hexString.append(hex).append(" ");
-        }
-
-        return hexString.toString().trim();
     }
 
     /**
@@ -892,11 +879,6 @@ public class ComfoConnectProtocolHandler {
      * @param uuid the UUID
      * @return 16 bytes
      */
-    private byte[] uuidToBytes(final java.util.UUID uuid) {
-        byte[] bytes = new byte[16];
-        ByteBuffer.wrap(bytes).putLong(uuid.getMostSignificantBits()).putLong(uuid.getLeastSignificantBits());
-        return bytes;
-    }
 
     /**
      * Convert bytes to UUID.
@@ -904,13 +886,6 @@ public class ComfoConnectProtocolHandler {
      * @param bytes the 16 bytes
      * @return UUID object
      */
-    private java.util.UUID bytesToUuid(final byte[] bytes) {
-        ByteBuffer bb = ByteBuffer.wrap(bytes);
-        long high = bb.getLong();
-        long low = bb.getLong();
-
-        return new java.util.UUID(high, low);
-    }
 
     /**
      * Discover the ventilation node ID by sending a CnNodeRequest.

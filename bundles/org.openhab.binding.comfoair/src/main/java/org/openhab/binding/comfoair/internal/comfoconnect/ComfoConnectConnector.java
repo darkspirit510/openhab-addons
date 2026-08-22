@@ -27,6 +27,8 @@ import java.util.concurrent.LinkedBlockingQueue;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
+import org.openhab.binding.comfoair.internal.comfoconnect.misc.HexConverter;
+import org.openhab.binding.comfoair.internal.comfoconnect.misc.ProtobufFramer;
 import org.openhab.binding.comfoair.internal.comfoconnect.sensor.Sensors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -71,6 +73,7 @@ public class ComfoConnectConnector {
     private @Nullable DataInputStream inputStream;
     private @Nullable DataOutputStream outputStream;
     private final ProtobufFramer framer;
+    private final HexConverter hexConverter = new HexConverter();
 
     /**
      * Create a new TCP connector.
@@ -266,7 +269,7 @@ public class ComfoConnectConnector {
             Zehnder.CnRmiRequest.Builder rmiBuilder = Zehnder.CnRmiRequest.newBuilder();
             rmiBuilder.setNodeId(nodeId);
             rmiBuilder.setMessage(com.google.protobuf.ByteString.copyFrom(rmiMessage));
-            logger.debug("Built CnRmiRequest: nodeId={}, message={}", nodeId, bytesToHex(rmiMessage));
+            logger.debug("Built CnRmiRequest: nodeId={}, message={}", nodeId, hexConverter.toHex(rmiMessage));
 
             byte[] frame = getFramer().createFrame(
                     Zehnder.GatewayOperation.newBuilder()
@@ -275,27 +278,13 @@ public class ComfoConnectConnector {
 
             logger.debug("Created RMI request frame, length={} bytes", frame.length);
             sendMessage(frame);
-            logger.info("RMI request sent for node {}: {}", nodeId, bytesToHex(rmiMessage));
+            logger.info("RMI request sent for node {}: {}", nodeId, hexConverter.toHex(rmiMessage));
         } catch (IOException e) {
             logger.error("Failed to send RMI request: {}", e.getMessage());
             isConnected = false;
             cleanup();
             throw e;
         }
-    }
-
-    /**
-     * Convert bytes to hexadecimal string for logging.
-     *
-     * @param bytes the bytes to convert
-     * @return hex string representation
-     */
-    private String bytesToHex(final byte[] bytes) {
-        StringBuilder sb = new StringBuilder();
-        for (byte b : bytes) {
-            sb.append(String.format("%02X ", b & 0xFF));
-        }
-        return sb.toString();
     }
 
     /**

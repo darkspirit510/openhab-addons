@@ -10,7 +10,7 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  */
-package org.openhab.binding.comfoair.internal.comfoconnect;
+package org.openhab.binding.comfoair.internal.comfoconnect.misc;
 
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
@@ -49,6 +49,8 @@ public class ProtobufFramer {
 
     private final UUID sourceUuid;
     private final UUID destinationUuid;
+    private final UuidConverter uuidConverter = new UuidConverter();
+    private final HexConverter hexConverter = new HexConverter();
 
     /**
      * Create a new message framer.
@@ -75,8 +77,8 @@ public class ProtobufFramer {
         DataOutputStream dos = new DataOutputStream(baos);
 
         // Write UUIDs (2x16 bytes)
-        byte[] srcUuidBytes = uuidToBytes(sourceUuid);
-        byte[] dstUuidBytes = uuidToBytes(destinationUuid);
+        byte[] srcUuidBytes = uuidConverter.toBytes(sourceUuid);
+        byte[] dstUuidBytes = uuidConverter.toBytes(destinationUuid);
 
         // Write command protobuf
         byte[] commandBytes = command.toByteArray();
@@ -102,7 +104,7 @@ public class ProtobufFramer {
         byte[] frameBytes = baos.toByteArray();
 
         // Log hex dump of frame for debugging
-        logger.debug("Frame created: {} bytes, hex: {}", frameBytes.length, bytesToHex(frameBytes));
+        logger.debug("Frame created: {} bytes, hex: {}", frameBytes.length, hexConverter.toHex(frameBytes));
 
         return frameBytes;
     }
@@ -148,8 +150,8 @@ public class ProtobufFramer {
             buffer.get(srcUuidBytes);
             buffer.get(dstUuidBytes);
 
-            UUID srcUuid = bytesToUuid(srcUuidBytes);
-            UUID dstUuid = bytesToUuid(dstUuidBytes);
+            UUID srcUuid = uuidConverter.fromBytes(srcUuidBytes);
+            UUID dstUuid = uuidConverter.fromBytes(dstUuidBytes);
 
             // Read command length
             short commandLength = buffer.getShort();
@@ -172,64 +174,6 @@ public class ProtobufFramer {
         } catch (Exception e) {
             logger.warn("Error parsing frame: {}", e.getMessage());
             return null;
-        }
-    }
-
-    /**
-     * Convert a UUID to 16 bytes in network order.
-     *
-     * @param uuid the UUID
-     * @return 16 bytes representing the UUID
-     */
-    private byte[] uuidToBytes(final UUID uuid) {
-        byte[] bytes = new byte[16];
-        long msb = uuid.getMostSignificantBits();
-        long lsb = uuid.getLeastSignificantBits();
-        ByteBuffer.wrap(bytes).putLong(msb).putLong(lsb);
-
-        return bytes;
-    }
-
-    /**
-     * Convert 16 bytes to a UUID.
-     *
-     * @param bytes 16 bytes representing a UUID
-     * @return the UUID
-     */
-    private UUID bytesToUuid(final byte[] bytes) {
-        ByteBuffer buffer = ByteBuffer.wrap(bytes);
-
-        return new UUID(buffer.getLong(), buffer.getLong());
-    }
-
-    /**
-     * Convert bytes to hexadecimal string for logging.
-     *
-     * @param bytes the bytes to convert
-     * @return hex string representation
-     */
-    private String bytesToHex(final byte[] bytes) {
-        StringBuilder sb = new StringBuilder();
-        for (byte b : bytes) {
-            sb.append(String.format("%02X ", b & 0xFF));
-        }
-        return sb.toString();
-    }
-
-    /**
-     * Container for parsed frame components.
-     */
-    public static class ParsedFrame {
-        public final UUID sourceUuid;
-        public final UUID destinationUuid;
-        public final byte[] command;
-        public final byte[] payload;
-
-        ParsedFrame(final UUID sourceUuid, final UUID destinationUuid, final byte[] command, final byte[] payload) {
-            this.sourceUuid = sourceUuid;
-            this.destinationUuid = destinationUuid;
-            this.command = command;
-            this.payload = payload;
         }
     }
 }

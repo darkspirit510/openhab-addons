@@ -14,6 +14,9 @@ package org.openhab.binding.comfoair.internal.comfoconnect;
 
 import java.util.UUID;
 
+import org.openhab.binding.comfoair.internal.comfoconnect.misc.ParsedFrame;
+import org.openhab.binding.comfoair.internal.comfoconnect.misc.ProtobufFramer;
+
 import com.zehnder.proto.Zehnder.GatewayOperation;
 
 /**
