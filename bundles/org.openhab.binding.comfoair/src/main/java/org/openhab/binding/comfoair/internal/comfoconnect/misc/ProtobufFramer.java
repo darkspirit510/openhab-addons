@@ -23,6 +23,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.protobuf.MessageLite;
+import com.zehnder.proto.Zehnder.GatewayOperation;
 
 /**
  * Handles message framing for ComfoConnect TCP protocol.
@@ -110,14 +111,33 @@ public class ProtobufFramer {
     }
 
     /**
-     * Create a frame with only command, no payload.
+     * Create a complete frame with the given operation type, reference, and payload.
+     * Builds the GatewayOperation internally.
      *
-     * @param command the GatewayOperation protobuf message
+     * @param type the operation type
+     * @param reference the reference number
+     * @param payload the payload message
      * @return the complete framed message ready to send
      * @throws IOException if serialization fails
      */
-    public byte[] createFrame(final MessageLite command) throws IOException {
-        return createFrame(command, null);
+    public byte[] createReferencedFrame(final GatewayOperation.OperationType type, final int reference,
+            final MessageLite payload) throws IOException {
+        GatewayOperation command = GatewayOperation.newBuilder().setType(type).setReference(reference).build();
+        return createFrame(command, payload);
+    }
+
+    /**
+     * Create a complete frame with the given operation type and payload.
+     * Builds the GatewayOperation internally with reference=0.
+     *
+     * @param type the operation type
+     * @param payload the payload message
+     * @return the complete framed message ready to send
+     * @throws IOException if serialization fails
+     */
+    public byte[] createReferencedFrame(final GatewayOperation.OperationType type, final MessageLite payload)
+            throws IOException {
+        return createReferencedFrame(type, 0, payload);
     }
 
     /**

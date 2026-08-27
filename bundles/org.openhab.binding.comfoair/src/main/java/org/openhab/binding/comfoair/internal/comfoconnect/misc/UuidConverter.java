@@ -47,9 +47,6 @@ public class UuidConverter {
      * @throws IllegalArgumentException if bytes is not 16 bytes long
      */
     public UUID fromBytes(final byte[] bytes) {
-        if (bytes == null) {
-            throw new IllegalArgumentException("Bytes must not be null");
-        }
         if (bytes.length != 16) {
             throw new IllegalArgumentException("UUID bytes must be 16 bytes long");
         }
@@ -65,9 +62,6 @@ public class UuidConverter {
      * @throws IllegalArgumentException if byteString is null or not 16 bytes
      */
     public UUID fromByteString(final ByteString byteString) {
-        if (byteString == null) {
-            throw new IllegalArgumentException("ByteString must not be null");
-        }
         return fromBytes(byteString.toByteArray());
     }
 }

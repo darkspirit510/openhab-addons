@@ -10,7 +10,7 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  */
-package org.openhab.binding.comfoair.internal.comfoconnect.usecase;
+package org.openhab.binding.comfoair.internal.comfoconnect.component;
 
 import java.io.IOException;
 

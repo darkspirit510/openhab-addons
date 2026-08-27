@@ -10,7 +10,7 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  */
-package org.openhab.binding.comfoair.internal.comfoconnect.usecase;
+package org.openhab.binding.comfoair.internal.comfoconnect.component;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -28,21 +28,21 @@ import com.google.protobuf.InvalidProtocolBufferException;
 import com.zehnder.proto.Zehnder;
 
 /**
- * Unit tests for {@link ListRegisteredAppsUseCase}.
+ * Unit tests for {@link Gateway}.
  * Uses pure JUnit 5 with inline anonymous classes for test doubles.
  */
 @DisplayName("ListRegisteredAppsUseCase")
-public class ListRegisteredAppsUseCaseTest {
+public class GatewayTest {
 
     private static final UUID TEST_CLIENT_UUID = UUID.fromString("d4c5e8f7-1a2b-3c4d-5e6f-7a8b9c0d1e2f");
 
     private MockRequestExecutor mockRequestExecutor;
-    private ListRegisteredAppsUseCase useCase;
+    private Gateway useCase;
 
     @BeforeEach
     public void setUp() {
         mockRequestExecutor = new MockRequestExecutor();
-        useCase = new ListRegisteredAppsUseCase(mockRequestExecutor);
+        useCase = new Gateway(mockRequestExecutor);
     }
 
     @Test
@@ -53,7 +53,7 @@ public class ListRegisteredAppsUseCaseTest {
         mockRequestExecutor.setResponseToReturn(mockResponse);
 
         // When: Execute the use case
-        List<UUID> result = useCase.execute();
+        List<UUID> result = useCase.registeredApps();
 
         // Then: Verify result
         assertNotNull(result);
@@ -73,7 +73,7 @@ public class ListRegisteredAppsUseCaseTest {
         mockRequestExecutor.setResponseToReturn(mockResponse);
 
         // When: Execute the use case
-        List<UUID> result = useCase.execute();
+        List<UUID> result = useCase.registeredApps();
 
         // Then: Verify result
         assertNotNull(result);
@@ -91,7 +91,7 @@ public class ListRegisteredAppsUseCaseTest {
         mockRequestExecutor.setResponseToReturn(mockResponse);
 
         // When: Execute the use case
-        List<UUID> result = useCase.execute();
+        List<UUID> result = useCase.registeredApps();
 
         // Then: Verify empty result
         assertNotNull(result);
@@ -106,7 +106,7 @@ public class ListRegisteredAppsUseCaseTest {
         mockRequestExecutor.setExceptionToThrow(expectedException);
 
         // When/Then: Verify exception is propagated
-        IOException actualException = assertThrows(IOException.class, () -> useCase.execute());
+        IOException actualException = assertThrows(IOException.class, () -> useCase.registeredApps());
         assertSame(expectedException, actualException);
     }
 
@@ -118,7 +118,7 @@ public class ListRegisteredAppsUseCaseTest {
         mockRequestExecutor.setInterruptException(expectedException);
 
         // When/Then: Verify exception is propagated
-        InterruptedException actualException = assertThrows(InterruptedException.class, () -> useCase.execute());
+        InterruptedException actualException = assertThrows(InterruptedException.class, () -> useCase.registeredApps());
 
         assertSame(expectedException, actualException);
     }
@@ -131,7 +131,7 @@ public class ListRegisteredAppsUseCaseTest {
         mockRequestExecutor.setResponseToReturn(invalidData);
 
         // When/Then: Verify IOException is thrown
-        IOException exception = assertThrows(IOException.class, () -> useCase.execute());
+        IOException exception = assertThrows(IOException.class, () -> useCase.registeredApps());
 
         assertTrue(exception.getMessage().contains("Failed to parse registered apps response"));
         assertInstanceOf(InvalidProtocolBufferException.class, exception.getCause());
@@ -151,7 +151,7 @@ public class ListRegisteredAppsUseCaseTest {
         mockRequestExecutor.setResponseToReturn(realResponse);
 
         // When: Execute the use case
-        List<UUID> result = useCase.execute();
+        List<UUID> result = useCase.registeredApps();
 
         // Then: Verify result matches real data
         assertNotNull(result);

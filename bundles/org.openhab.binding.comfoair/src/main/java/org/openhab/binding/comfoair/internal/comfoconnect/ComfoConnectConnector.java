@@ -12,28 +12,19 @@
  */
 package org.openhab.binding.comfoair.internal.comfoconnect;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.EOFException;
 import java.io.IOException;
-import java.net.InetSocketAddress;
-import java.net.Socket;
-import java.net.SocketException;
-import java.net.SocketTimeoutException;
-import java.nio.ByteBuffer;
 import java.util.UUID;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.LinkedBlockingQueue;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
+import org.openhab.binding.comfoair.internal.comfoconnect.component.Messages;
+import org.openhab.binding.comfoair.internal.comfoconnect.component.ReaderThread;
 import org.openhab.binding.comfoair.internal.comfoconnect.misc.HexConverter;
 import org.openhab.binding.comfoair.internal.comfoconnect.misc.ProtobufFramer;
+import org.openhab.binding.comfoair.internal.comfoconnect.misc.SocketManagerImpl;
 import org.openhab.binding.comfoair.internal.comfoconnect.sensor.Sensors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import com.zehnder.proto.Zehnder;
 
 /**
  * TCP socket-based connector for ComfoConnect protocol (newer Q-series devices).
@@ -54,26 +45,20 @@ public class ComfoConnectConnector {
 
     private final Logger logger = LoggerFactory.getLogger(ComfoConnectConnector.class);
 
-    protected static final int SOCKET_TIMEOUT_MS = 0; // No timeout - use blocking reads instead
     protected static final int DEFAULT_QUEUE_CAPACITY = 100;
-
-    protected final BlockingQueue<byte[]> messageQueue;
-    protected volatile boolean isConnected = false;
-    protected volatile boolean isShutdown = false;
-
-    protected @Nullable Thread readerThread;
-    protected final Object readerThreadLock = new Object();
 
     private final String hostname;
     private final int port;
     private final UUID clientUuid;
-    private final UUID gatewayUuid;
 
-    private @Nullable Socket socket;
-    private @Nullable DataInputStream inputStream;
-    private @Nullable DataOutputStream outputStream;
+    private final SocketManagerImpl socketManager;
     private final ProtobufFramer framer;
     private final HexConverter hexConverter = new HexConverter();
+    private @Nullable Messages messages;
+    private @Nullable ReaderThread readerThread;
+
+    protected volatile boolean isConnected = false;
+    protected volatile boolean isShutdown = false;
 
     /**
      * Create a new TCP connector.
@@ -98,12 +83,21 @@ public class ComfoConnectConnector {
      */
     public ComfoConnectConnector(final String hostname, final int port, final UUID clientUuid, final UUID gatewayUuid,
             final int queueCapacity) {
-        this.messageQueue = new LinkedBlockingQueue<>(queueCapacity);
         this.hostname = hostname;
         this.port = port;
         this.clientUuid = clientUuid;
-        this.gatewayUuid = gatewayUuid;
         this.framer = new ProtobufFramer(clientUuid, gatewayUuid);
+        this.socketManager = new SocketManagerImpl(hostname, port);
+    }
+
+    /**
+     * Set the Messages instance for this connector.
+     * This must be called before connect() to enable message queuing and consumption.
+     *
+     * @param messages the Messages instance to use
+     */
+    public void setMessages(final @Nullable Messages messages) {
+        this.messages = messages;
     }
 
     /**
@@ -119,25 +113,20 @@ public class ComfoConnectConnector {
         logger.info("Connecting to ComfoConnect gateway at {}:{}", hostname, port);
 
         try {
-            Socket socket = new Socket();
-            socket.setSoTimeout(SOCKET_TIMEOUT_MS);
-            socket.connect(new InetSocketAddress(hostname, port), 5000);
+            socketManager.connect();
 
-            DataInputStream inputStream = new DataInputStream(socket.getInputStream());
-            DataOutputStream outputStream = new DataOutputStream(socket.getOutputStream());
+            // Initialize reader thread manager with the new input stream
+            if (messages != null) {
+                readerThread = new ReaderThread(socketManager.getInputStream(), messages);
+                readerThread.start();
+            }
 
-            this.socket = socket;
-            this.inputStream = inputStream;
-            this.outputStream = outputStream;
-            this.isConnected = true;
-
+            isConnected = true;
             logger.info("Connected to ComfoConnect gateway");
-
-            startReaderThread(this::readLoop, "ComfoConnect-Reader");
         } catch (IOException e) {
             logger.error("Failed to connect to ComfoConnect gateway: {}", e.getMessage());
             isConnected = false;
-            cleanup();
+            socketManager.cleanup();
             throw e;
         }
     }
@@ -151,8 +140,17 @@ public class ComfoConnectConnector {
     public void disconnect() {
         logger.info("Disconnecting from ComfoConnect gateway");
         isShutdown = true;
-        stopReaderThread();
-        cleanup();
+
+        if (messages != null) {
+            messages.setShutdown(true);
+        }
+
+        if (this.readerThread != null) {
+            this.readerThread.setConnected(false);
+            this.readerThread.stopReaderThread();
+        }
+
+        socketManager.disconnect();
         isConnected = false;
         logger.info("Disconnected from ComfoConnect gateway");
     }
@@ -164,22 +162,11 @@ public class ComfoConnectConnector {
      * @throws IOException if send fails
      */
     public void sendMessage(final byte[] message) throws IOException {
-        DataOutputStream out = this.outputStream;
-        if (out == null || socket == null || !isConnected) {
-            throw new IOException("Not connected to gateway");
-        }
-
-        synchronized (out) {
-            try {
-                out.write(message);
-                out.flush();
-                logger.debug("Sent {} bytes to gateway", message.length);
-            } catch (IOException e) {
-                logger.error("Error sending message: {}", e.getMessage());
-                isConnected = false;
-                cleanup();
-                throw e;
-            }
+        if (messages != null) {
+            messages.sendMessage(message);
+        } else {
+            // Fallback to direct socket send if messages not set
+            socketManager.sendMessage(message);
         }
     }
 
@@ -191,30 +178,11 @@ public class ComfoConnectConnector {
      * @throws IOException if send fails
      */
     public void sendRpdoRequest(final int pdid, final int type) throws IOException {
-        logger.debug("sendRpdoRequest called: pdid={}, type={}", pdid, type);
-
-        try {
-            Zehnder.CnRpdoRequest.Builder rpdoBuilder = Zehnder.CnRpdoRequest.newBuilder();
-            rpdoBuilder.setPdid(pdid);
-            rpdoBuilder.setType(type);
-            rpdoBuilder.setZone(1); // Zone must be set to 1, matching aiocomfoconnect
-            logger.debug("Built CnRpdoRequest: pdid={}, type={}, zone={}", pdid, type, 1);
-
-            byte[] frame = getFramer().createFrame(
-                    Zehnder.GatewayOperation.newBuilder()
-                            .setType(Zehnder.GatewayOperation.OperationType.CnRpdoRequestType).build(),
-                    rpdoBuilder.build());
-
-            logger.debug("Created RPDO request frame, length={} bytes", frame.length);
-            sendMessage(frame);
-            Sensors.findById(pdid).ifPresentOrElse(sensor -> logger.info("RPDO request sent for sensor {}", sensor),
-                    () -> logger.info("RPDO request sent for sensor ??? ({})", pdid));
-        } catch (IOException e) {
-            logger.error("Failed to send RPDO request: {}", e.getMessage());
-            isConnected = false;
-            cleanup();
-            throw e;
+        if (messages != null) {
+            messages.sendRpdoRequest(pdid, type);
         }
+        Sensors.findById(pdid).ifPresentOrElse(sensor -> logger.info("RPDO request sent for sensor {}", sensor),
+                () -> logger.info("RPDO request sent for sensor ??? ({})", pdid));
     }
 
     /**
@@ -226,33 +194,11 @@ public class ComfoConnectConnector {
      * @throws IOException if send fails
      */
     public void sendRpdoUnsubscribe(final int pdid) throws IOException {
-        logger.debug("sendRpdoUnsubscribe called: pdid={}", pdid);
-
-        try {
-            // To unsubscribe, send a CnRpdoRequest without the type field
-            // According to the protocol: "when no type is specified, a previously registered RPDO with given PDID is
-            // deleted"
-            Zehnder.CnRpdoRequest.Builder rpdoBuilder = Zehnder.CnRpdoRequest.newBuilder();
-            rpdoBuilder.setPdid(pdid);
-            rpdoBuilder.setZone(1); // Zone must be set to 1, matching aiocomfoconnect
-            // Note: We do NOT set the type field - this is what triggers the unsubscribe
-            logger.debug("Built CnRpdoRequest for unsubscribe: pdid={}, zone={}", pdid, 1);
-
-            byte[] frame = getFramer().createFrame(
-                    Zehnder.GatewayOperation.newBuilder()
-                            .setType(Zehnder.GatewayOperation.OperationType.CnRpdoRequestType).build(),
-                    rpdoBuilder.build());
-
-            logger.debug("Created RPDO unsubscribe frame, length={} bytes", frame.length);
-            sendMessage(frame);
-            Sensors.findById(pdid).ifPresentOrElse(sensor -> logger.info("RPDO unsubscribe sent for sensor {}", sensor),
-                    () -> logger.info("RPDO unsubscribe sent for sensor ??? ({})", pdid));
-        } catch (IOException e) {
-            logger.error("Failed to send RPDO unsubscribe: {}", e.getMessage());
-            isConnected = false;
-            cleanup();
-            throw e;
+        if (messages != null) {
+            messages.sendRpdoUnsubscribe(pdid);
         }
+        Sensors.findById(pdid).ifPresentOrElse(sensor -> logger.info("RPDO unsubscribe sent for sensor {}", sensor),
+                () -> logger.info("RPDO unsubscribe sent for sensor ??? ({})", pdid));
     }
 
     /**
@@ -263,143 +209,18 @@ public class ComfoConnectConnector {
      * @throws IOException if send fails
      */
     public void sendRmiRequest(final int nodeId, final byte[] rmiMessage) throws IOException {
-        logger.debug("sendRmiRequest called: nodeId={}, rmiMessage length={}", nodeId, rmiMessage.length);
-
-        try {
-            Zehnder.CnRmiRequest.Builder rmiBuilder = Zehnder.CnRmiRequest.newBuilder();
-            rmiBuilder.setNodeId(nodeId);
-            rmiBuilder.setMessage(com.google.protobuf.ByteString.copyFrom(rmiMessage));
-            logger.debug("Built CnRmiRequest: nodeId={}, message={}", nodeId, hexConverter.toHex(rmiMessage));
-
-            byte[] frame = getFramer().createFrame(
-                    Zehnder.GatewayOperation.newBuilder()
-                            .setType(Zehnder.GatewayOperation.OperationType.CnRmiRequestType).build(),
-                    rmiBuilder.build());
-
-            logger.debug("Created RMI request frame, length={} bytes", frame.length);
-            sendMessage(frame);
-            logger.info("RMI request sent for node {}: {}", nodeId, hexConverter.toHex(rmiMessage));
-        } catch (IOException e) {
-            logger.error("Failed to send RMI request: {}", e.getMessage());
-            isConnected = false;
-            cleanup();
-            throw e;
+        if (messages != null) {
+            messages.sendRmiRequest(nodeId, rmiMessage);
         }
-    }
-
-    /**
-     * Main reader loop running in dedicated thread.
-     * Reads complete frames from the socket and queues them for consumers.
-     */
-    private void readLoop() {
-        DataInputStream in = this.inputStream;
-        if (in == null) {
-            logger.error("Input stream not initialized");
-            return;
-        }
-
-        logger.info("Reader loop started, waiting for messages from gateway");
-        try {
-            while (!Thread.currentThread().isInterrupted() && isConnected) {
-                try {
-                    logger.debug("Attempting to read next message from gateway...");
-                    int totalLength = in.readInt();
-
-                    if (totalLength < 0 || totalLength > 65536) {
-                        logger.warn("Invalid frame length: {}", totalLength);
-                        break;
-                    }
-
-                    byte[] frameData = new byte[4 + totalLength];
-                    ByteBuffer lengthBuffer = ByteBuffer.wrap(frameData, 0, 4);
-                    lengthBuffer.putInt(totalLength);
-
-                    in.readFully(frameData, 4, totalLength);
-
-                    if (!queueMessage(frameData)) {
-                        logger.warn("Message queue full, dropping message");
-                    }
-
-                    logger.trace("Received {} bytes", frameData.length);
-
-                } catch (SocketTimeoutException e) {
-                    // Socket timeout is normal - just continue waiting for data
-                    logger.debug("Socket timeout while reading ({}ms), retrying...", SOCKET_TIMEOUT_MS);
-                    continue;
-                } catch (SocketException e) {
-                    if (Thread.currentThread().isInterrupted()) {
-                        logger.debug("Reader interrupted (SocketException): {}", e.getMessage());
-                        break;
-                    } else {
-                        logger.error("Socket error: {}", e.getMessage());
-                        isConnected = false;
-                        break;
-                    }
-                }
-            }
-        } catch (EOFException e) {
-            logger.info("Gateway closed connection");
-            isConnected = false;
-        } catch (IOException e) {
-            if (!Thread.currentThread().isInterrupted()) {
-                logger.error("I/O error in reader loop: {}", e.getMessage());
-                isConnected = false;
-            } else {
-                logger.debug("Reader loop interrupted");
-            }
-        } finally {
-            logger.debug("Reader loop exiting");
-        }
-    }
-
-    /**
-     * Clean up socket resources.
-     */
-    private void cleanup() {
-        clearQueue();
-
-        DataInputStream in = this.inputStream;
-        if (in != null) {
-            try {
-                in.close();
-            } catch (IOException e) {
-                logger.debug("Error closing input stream: {}", e.getMessage());
-            }
-        }
-
-        DataOutputStream out = this.outputStream;
-        if (out != null) {
-            try {
-                out.close();
-            } catch (IOException e) {
-                logger.debug("Error closing output stream: {}", e.getMessage());
-            }
-        }
-
-        Socket sock = this.socket;
-        if (sock != null) {
-            try {
-                sock.close();
-            } catch (IOException e) {
-                logger.debug("Error closing socket: {}", e.getMessage());
-            }
-        }
-
-        this.socket = null;
-        this.inputStream = null;
-        this.outputStream = null;
+        logger.info("RMI request sent for node {}: {}", nodeId, new HexConverter().toHex(rmiMessage));
     }
 
     public ProtobufFramer getFramer() {
         return framer;
     }
 
-    public UUID getClientUuid() {
+    public UUID clientUuid() {
         return clientUuid;
-    }
-
-    public UUID getGatewayUuid() {
-        return gatewayUuid;
     }
 
     /**
@@ -409,107 +230,13 @@ public class ComfoConnectConnector {
      * @return the next message, or null if interrupted
      */
     public byte @org.eclipse.jdt.annotation.Nullable [] getNextMessage() {
-        try {
-            byte[] message = messageQueue.take();
-            logger.info("Retrieved message from queue: {} bytes, first byte: 0x{}",
-                    message != null ? message.length : 0,
-                    message != null && message.length > 0 ? String.format("%02X", message[0]) : "N/A");
-            return message;
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            logger.debug("getNextMessage interrupted");
-
-            return null;
+        if (messages != null) {
+            return messages.getNextMessage();
         }
-    }
-
-    public byte @org.eclipse.jdt.annotation.Nullable [] pollMessage(final long timeoutMs) {
-        try {
-            return messageQueue.poll(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            logger.debug("pollMessage interrupted");
-
-            return null;
-        }
+        return null;
     }
 
     public boolean isConnected() {
         return isConnected;
-    }
-
-    /**
-     * Start the reader thread with the given runnable.
-     * The thread will be interrupted via interrupt() on disconnect.
-     *
-     * @param reader the runnable that implements the message reading loop
-     * @param threadName the name for the reader thread (for logging)
-     */
-    protected void startReaderThread(final Runnable reader, final String threadName) {
-        synchronized (readerThreadLock) {
-            if (readerThread != null && readerThread.isAlive()) {
-                logger.warn("Reader thread already running, stopping previous one");
-                readerThread.interrupt();
-
-                try {
-                    readerThread.join(1000);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-            }
-
-            readerThread = new Thread(reader, threadName);
-            readerThread.setDaemon(true);
-            readerThread.start();
-            logger.debug("Reader thread started: {}", threadName);
-        }
-    }
-
-    /**
-     * Stop the reader thread gracefully via interrupt + join.
-     * This is safe to call multiple times.
-     */
-    protected void stopReaderThread() {
-        synchronized (readerThreadLock) {
-            if (readerThread != null && readerThread.isAlive()) {
-                logger.debug("Stopping reader thread");
-                readerThread.interrupt();
-
-                try {
-                    readerThread.join(2000);
-
-                    if (readerThread.isAlive()) {
-                        logger.warn("Reader thread did not terminate within timeout");
-                    }
-                } catch (InterruptedException e) {
-                    logger.debug("Interrupted while stopping reader thread");
-                    Thread.currentThread().interrupt();
-                }
-
-                readerThread = null;
-            }
-        }
-    }
-
-    /**
-     * Queue a message for delivery to consumers.
-     * Should be called by subclasses from the reader thread when messages arrive.
-     *
-     * @param message the message to queue
-     * @return true if queued successfully, false if queue is full
-     */
-    protected boolean queueMessage(final byte[] message) {
-        if (isShutdown) {
-            return false;
-        }
-
-        return messageQueue.offer(message);
-    }
-
-    /**
-     * Clear all pending messages in the queue.
-     */
-    protected void clearQueue() {
-        messageQueue.clear();
     }
 }

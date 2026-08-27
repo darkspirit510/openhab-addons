@@ -14,28 +14,25 @@ package org.openhab.binding.comfoair.internal.comfoconnect;
 
 import java.io.IOException;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
-import org.openhab.binding.comfoair.internal.ComfoAirBindingConstants;
+import org.openhab.binding.comfoair.internal.comfoconnect.component.Gateway;
+import org.openhab.binding.comfoair.internal.comfoconnect.component.KeepAliveWorker;
 import org.openhab.binding.comfoair.internal.comfoconnect.misc.HexConverter;
 import org.openhab.binding.comfoair.internal.comfoconnect.misc.ParsedFrame;
-import org.openhab.binding.comfoair.internal.comfoconnect.misc.PendingRequest;
 import org.openhab.binding.comfoair.internal.comfoconnect.misc.SensorDataCallback;
-import org.openhab.binding.comfoair.internal.comfoconnect.misc.UuidConverter;
+import org.openhab.binding.comfoair.internal.comfoconnect.misc.SensorSubscriptionManager;
+import org.openhab.binding.comfoair.internal.comfoconnect.misc.SensorSubscriptionManagerImpl;
 import org.openhab.binding.comfoair.internal.comfoconnect.response.Payload;
 import org.openhab.binding.comfoair.internal.comfoconnect.sensor.Sensor;
 import org.openhab.binding.comfoair.internal.comfoconnect.sensor.SensorValueType;
 import org.openhab.binding.comfoair.internal.comfoconnect.sensor.Sensors;
-import org.openhab.binding.comfoair.internal.comfoconnect.usecase.ListRegisteredAppsUseCase;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -43,6 +40,7 @@ import com.google.protobuf.MessageLite;
 import com.zehnder.proto.Zehnder;
 import com.zehnder.proto.Zehnder.GatewayOperation;
 import com.zehnder.proto.Zehnder.GatewayOperation.GatewayResult;
+import com.zehnder.proto.Zehnder.GatewayOperation.OperationType;
 
 /**
  * Handles ComfoConnect protocol state machine: authentication, session management, and message correlation.
@@ -54,6 +52,7 @@ import com.zehnder.proto.Zehnder.GatewayOperation.GatewayResult;
  * - KeepAlive supervision (30-60 second intervals)
  * - Timeout handling for pending requests
  * - Sensor subscription management using centralized sensor registry
+ * - Message dispatching and routing
  *
  * @author Sascha Knoop - Initial contribution
  */
@@ -62,7 +61,6 @@ public class ComfoConnectProtocolHandler {
 
     private final Logger logger = LoggerFactory.getLogger(ComfoConnectProtocolHandler.class);
 
-    private static final long KEEPALIVE_INTERVAL_SEC = 30;
     private static final long REQUEST_TIMEOUT_SEC = 5;
     private static final int REQUEST_RETRY_COUNT = 3;
     private static final long REQUEST_RETRY_DELAY_SEC = 5;
@@ -70,20 +68,45 @@ public class ComfoConnectProtocolHandler {
 
     private final ComfoConnectConnector connector;
     private final ScheduledExecutorService scheduler;
+    private final HexConverter hexConverter = new HexConverter();
+    private final SensorSubscriptionManager sensorSubscriptionManager;
+    private final RequestExecutor requestExecutor;
+
+    // Session management fields
     private final int pinCode;
     private final boolean autoTakeover;
-    private final UuidConverter uuidConverter = new UuidConverter();
-    private final HexConverter hexConverter = new HexConverter();
-
-    private @Nullable SensorDataCallback sensorCallback;
-    private @Nullable Runnable onKeepAliveFailure;
-    private @Nullable Runnable connectionErrorCallback;
-
     private volatile boolean sessionActive = false;
+
+    // Request management fields
     private volatile int nextReference = 1;
     private final Map<Integer, PendingRequest<?>> pendingRequests = new HashMap<>();
-    private @Nullable ScheduledFuture<?> keepAliveTask;
+
+    // Message dispatcher fields
+    private @Nullable SensorDataCallback sensorCallback;
+    private @Nullable Runnable connectionErrorCallback;
+    private @Nullable KeepAliveWorker keepAliveWorker;
     private @Nullable Integer ventilationNodeId;
+
+    /**
+     * Container for pending request information.
+     */
+    private static class PendingRequest<T> {
+        public final int reference;
+        public final long createdTime;
+        public final CompletableFuture<T> future;
+        public final Class<T> responseClass;
+
+        public PendingRequest(final int reference, final CompletableFuture<T> future, final Class<T> responseClass) {
+            this.reference = reference;
+            this.future = future;
+            this.responseClass = responseClass;
+            this.createdTime = System.currentTimeMillis();
+        }
+
+        public boolean isExpired(final long timeoutMs) {
+            return (System.currentTimeMillis() - createdTime) > timeoutMs;
+        }
+    }
 
     /**
      * Create a new protocol handler.
@@ -96,9 +119,11 @@ public class ComfoConnectProtocolHandler {
     public ComfoConnectProtocolHandler(final ComfoConnectConnector connector, final int pinCode,
             final boolean autoTakeover, final ScheduledExecutorService scheduler) {
         this.connector = connector;
+        this.scheduler = scheduler;
         this.pinCode = pinCode;
         this.autoTakeover = autoTakeover;
-        this.scheduler = scheduler;
+        this.requestExecutor = request -> sendRequestWithRetry(request, byte[].class, REQUEST_TIMEOUT_SEC);
+        this.sensorSubscriptionManager = new SensorSubscriptionManagerImpl(connector, this::handleConnectionError);
     }
 
     /**
@@ -108,6 +133,24 @@ public class ComfoConnectProtocolHandler {
      */
     public void setSensorCallback(final @Nullable SensorDataCallback callback) {
         this.sensorCallback = callback;
+    }
+
+    /**
+     * Set the callback to be invoked when a connection error occurs.
+     *
+     * @param callback the callback to invoke on connection error
+     */
+    public void setConnectionErrorCallback(final Runnable callback) {
+        this.connectionErrorCallback = callback;
+    }
+
+    /**
+     * Set the callback to be invoked when keep-alive fails.
+     *
+     * @param callback the callback to invoke on keep-alive failure
+     */
+    public void setKeepAliveFailureCallback(final Runnable callback) {
+        this.keepAliveWorker = new KeepAliveWorker(connector, scheduler, this, callback);
     }
 
     /**
@@ -121,18 +164,16 @@ public class ComfoConnectProtocolHandler {
     public void initialize() throws IOException, InterruptedException, TimeoutException {
         logger.debug("Initializing ComfoConnect protocol");
 
-        registerAppIfNeeded();
+        // Session initialization
+        new Gateway(requestExecutor).ensureRegistration(connector.clientUuid(), pinCode);
         startSession();
+        sessionActive = true;
+
         startKeepAliveTimer();
 
         // Discover the ventilation node ID for RMI requests
         discoverVentilationNode();
 
-        // Note: Sensor subscriptions are now handled by the ComfoConnectHandler.
-        // It will subscribe to sensors based on which channels are linked.
-        // See ComfoConnectHandler.subscribeToLinkedChannels()
-
-        sessionActive = true;
         logger.info("ComfoConnect protocol initialized successfully");
     }
 
@@ -167,8 +208,8 @@ public class ComfoConnectProtocolHandler {
      * @throws TimeoutException if response times out
      * @throws InterruptedException if interrupted while waiting
      */
-    public <T> T sendRequestSync(final com.google.protobuf.MessageLite request, final Class<T> responseClass,
-            final long timeoutSec) throws IOException, TimeoutException, InterruptedException {
+    public <T> T sendRequestSync(final MessageLite request, final Class<T> responseClass, final long timeoutSec)
+            throws IOException, TimeoutException, InterruptedException {
         CompletableFuture<T> future = sendRequestAsync(request, responseClass);
 
         try {
@@ -180,7 +221,8 @@ public class ComfoConnectProtocolHandler {
                 throw (IOException) cause;
             }
 
-            throw new IOException("Request failed: " + cause.getMessage(), cause);
+            String message = cause != null ? cause.getMessage() : "Unknown error";
+            throw new IOException("Request failed: " + message, cause);
         }
     }
 
@@ -194,8 +236,8 @@ public class ComfoConnectProtocolHandler {
      * @throws IOException if all retries fail
      * @throws InterruptedException if interrupted
      */
-    private <T> T sendRequestWithRetry(final com.google.protobuf.MessageLite request, final Class<T> responseClass,
-            final long timeoutSec) throws IOException, InterruptedException {
+    private <T> T sendRequestWithRetry(final MessageLite request, final Class<T> responseClass, final long timeoutSec)
+            throws IOException, InterruptedException {
         int attempts = 0;
         IOException lastException = null;
 
@@ -226,8 +268,8 @@ public class ComfoConnectProtocolHandler {
      * @return a future that will contain the response
      * @throws IOException if send fails
      */
-    public <T> CompletableFuture<T> sendRequestAsync(final com.google.protobuf.MessageLite request,
-            final Class<T> responseClass) throws IOException {
+    public <T> CompletableFuture<T> sendRequestAsync(final MessageLite request, final Class<T> responseClass)
+            throws IOException {
         int reference = allocateReference();
         CompletableFuture<T> future = new CompletableFuture<>();
         PendingRequest<T> pendingRequest = new PendingRequest<>(reference, future, responseClass);
@@ -237,12 +279,10 @@ public class ComfoConnectProtocolHandler {
         }
 
         try {
-            GatewayOperation.Builder opBuilder = GatewayOperation.newBuilder();
-            opBuilder.setReference(reference);
-            setOperationType(opBuilder, request);
+            OperationType opType = getOperationType(request);
 
             logger.info("Sending {} (reference {})", request.getClass().getSimpleName(), reference);
-            byte[] frame = connector.getFramer().createFrame(opBuilder.build(), request);
+            byte[] frame = connector.getFramer().createReferencedFrame(opType, reference, request);
             connector.sendMessage(frame);
 
         } catch (IOException e) {
@@ -257,6 +297,208 @@ public class ComfoConnectProtocolHandler {
         scheduler.schedule(() -> handleRequestTimeout(reference), REQUEST_TIMEOUT_SEC, TimeUnit.SECONDS);
 
         return future;
+    }
+
+    /**
+     * Allocate a unique reference number for a request.
+     *
+     * @return a unique reference
+     */
+    public synchronized int allocateReference() {
+        int ref = nextReference++;
+        if (nextReference > MAX_REFERENCE) {
+            nextReference = 1;
+        }
+        return ref;
+    }
+
+    /**
+     * Complete a pending request with response data.
+     *
+     * @param reference the request reference
+     * @param payload the response payload
+     * @param result the gateway result from the operation
+     */
+    public void completeRequest(final int reference, final Payload payload, final GatewayResult result) {
+        PendingRequest<?> pending;
+
+        synchronized (pendingRequests) {
+            pending = pendingRequests.remove(reference);
+        }
+
+        if (pending == null) {
+            logger.trace("Received response for unknown reference: {}", reference);
+            return;
+        }
+
+        try {
+            // Check for gateway errors first
+            if (result != GatewayResult.OK) {
+                String errorMsg = getErrorMessageForResult(result);
+                pending.future.completeExceptionally(new IOException(errorMsg));
+                return;
+            }
+
+            // Parse response based on expected type
+            Object response = parseResponse(pending.responseClass, payload);
+            @SuppressWarnings("unchecked")
+            PendingRequest<Object> typedPending = (PendingRequest<Object>) pending;
+            typedPending.future.complete(response);
+        } catch (Exception e) {
+            pending.future.completeExceptionally(e);
+        }
+    }
+
+    /**
+     * Handle a request timeout.
+     *
+     * @param reference the request reference that timed out
+     */
+    public void handleRequestTimeout(final int reference) {
+        PendingRequest<?> pending;
+
+        synchronized (pendingRequests) {
+            pending = pendingRequests.remove(reference);
+        }
+
+        if (pending != null) {
+            pending.future.completeExceptionally(
+                    new TimeoutException("Request " + reference + " timed out after " + REQUEST_TIMEOUT_SEC + "s"));
+            logger.warn("Request {} timed out", reference);
+        }
+    }
+
+    /**
+     * Clear all pending requests (on shutdown).
+     */
+    private void clearPendingRequests() {
+        synchronized (pendingRequests) {
+            for (PendingRequest<?> pending : pendingRequests.values()) {
+                pending.future.completeExceptionally(new IOException("Protocol handler shut down"));
+            }
+
+            pendingRequests.clear();
+        }
+    }
+
+    /**
+     * Get a human-readable error message for a gateway result.
+     *
+     * @param result the gateway result
+     * @return error message
+     */
+    private String getErrorMessageForResult(final GatewayResult result) {
+        return switch (result) {
+            case OK -> "No error";
+            case BAD_REQUEST -> "Gateway error: BAD_REQUEST (something wrong with the request)";
+            case INTERNAL_ERROR -> "Gateway error: INTERNAL_ERROR (request was OK but handling failed)";
+            case NOT_REACHABLE -> "Gateway error: NOT_REACHABLE (backend cannot route the request)";
+            case OTHER_SESSION -> "Gateway error: OTHER_SESSION (another session already active)";
+            case NOT_ALLOWED -> "Gateway error: NOT_ALLOWED (invalid PIN or permission denied)";
+            case NO_RESOURCES -> "Gateway error: NO_RESOURCES (not enough memory)";
+            case NOT_EXIST -> "Gateway error: NOT_EXIST (ComfoNet node or property does not exist)";
+            case RMI_ERROR -> "Gateway error: RMI_ERROR (RMI communication failed)";
+        };
+    }
+
+    /**
+     * Parse response based on expected type.
+     *
+     * @param responseClass the expected response class
+     * @param payload the payload
+     * @return parsed response object
+     */
+    private Object parseResponse(final Class<?> responseClass, final Payload payload) throws IOException {
+        if (responseClass == byte[].class) {
+            return payload.content;
+        }
+
+        throw new IOException("Unknown response type: " + responseClass.getName());
+    }
+
+    /**
+     * Get the operation type for a given request.
+     *
+     * @param request the request message
+     * @return the corresponding operation type
+     */
+    private OperationType getOperationType(final MessageLite request) {
+        String requestType = request.getClass().getSimpleName();
+
+        if (requestType.contains("RegisterApp")) {
+            return OperationType.RegisterAppRequestType;
+        } else if (requestType.contains("StartSession")) {
+            return OperationType.StartSessionRequestType;
+        } else if (requestType.contains("ListRegisteredApps")) {
+            return OperationType.ListRegisteredAppsRequestType;
+        } else if (requestType.contains("KeepAlive")) {
+            return OperationType.KeepAliveType;
+        } else if (requestType.contains("CloseSession")) {
+            return OperationType.CloseSessionRequestType;
+        } else if (requestType.contains("CnNodeRequest")) {
+            return OperationType.CnNodeRequestType;
+        }
+        throw new IllegalArgumentException("Unknown request type: " + requestType);
+    }
+
+    /**
+     * Start a session with the gateway, with optional takeover of existing sessions.
+     *
+     * @throws IOException if start fails or session conflict exists
+     * @throws InterruptedException if interrupted
+     */
+    private void startSession() throws IOException, InterruptedException {
+        logger.debug("Starting session with gateway (autoTakeover={})", autoTakeover);
+
+        Zehnder.StartSessionRequest request = Zehnder.StartSessionRequest.newBuilder().setTakeover(autoTakeover)
+                .build();
+
+        requestExecutor.execute(request);
+        logger.info("Session started successfully");
+    }
+
+    /**
+     * Close the session with the gateway.
+     *
+     * @throws IOException if close fails
+     */
+    private void closeSession() throws IOException {
+        logger.debug("Closing session with gateway");
+
+        Zehnder.CloseSessionRequest closeSessionRequest = Zehnder.CloseSessionRequest.newBuilder().build();
+
+        byte[] frame = connector.getFramer()
+                .createReferencedFrame(GatewayOperation.OperationType.CloseSessionRequestType, closeSessionRequest);
+
+        try {
+            connector.sendMessage(frame);
+        } catch (IOException e) {
+            logger.debug("Error sending close session: {}", e.getMessage());
+        }
+
+        logger.debug("Session closed");
+    }
+
+    /**
+     * Start the keep-alive timer.
+     */
+    private void startKeepAliveTimer() {
+        if (this.keepAliveWorker != null) {
+            this.keepAliveWorker.startKeepAliveTimer();
+        }
+    }
+
+    /**
+     * Stop the keep-alive timer.
+     */
+    public void stopKeepAliveTimer() {
+        if (this.keepAliveWorker != null) {
+            this.keepAliveWorker.stopKeepAliveTimer();
+        }
+    }
+
+    public boolean isSessionActive() {
+        return sessionActive;
     }
 
     /**
@@ -325,7 +567,7 @@ public class ComfoConnectProtocolHandler {
                     break;
 
                 default:
-                    // Other async responses (CnRmiAsyncResponse, etc.)
+                    // Other async responses
                     if (operation.getReference() > 0) {
                         completeRequest(operation.getReference(), payload, operation.getResult());
                     }
@@ -335,258 +577,6 @@ public class ComfoConnectProtocolHandler {
 
         } catch (Exception e) {
             logger.error("Error handling incoming message: {}", e.getMessage(), e);
-        }
-    }
-
-    /**
-     * Register the app if not already registered. Attempts registration and ignores error if already
-     * registered.
-     *
-     * @throws IOException if registration fails
-     * @throws TimeoutException if timeout occurs
-     * @throws InterruptedException if interrupted
-     */
-    private void registerAppIfNeeded() throws IOException, TimeoutException, InterruptedException {
-        logger.debug("Checking if app registration is needed");
-
-        try {
-            // Get list of already registered apps
-            ListRegisteredAppsUseCase useCase = new ListRegisteredAppsUseCase(this::sendRequestWithRetryWrapper);
-            List<UUID> registeredApps = useCase.execute();
-            UUID clientUuid = connector.getClientUuid();
-
-            if (registeredApps.contains(clientUuid)) {
-                logger.debug("App already registered with UUID: {}", clientUuid);
-                return;
-            }
-
-            logger.debug("App not yet registered, attempting registration");
-            registerApp();
-        } catch (IOException e) {
-            // If listing registered apps fails, attempt registration as fallback
-            logger.debug("Failed to list registered apps ({}), attempting registration anyway", e.getMessage());
-            registerApp(); // Will throw IOException if fails, causing initialization to fail
-        }
-    }
-
-    /**
-     * Wrapper method for sendRequestWithRetry that matches the RequestExecutor interface.
-     *
-     * @param request the request message
-     * @return the response as byte array
-     * @throws IOException if the request fails
-     * @throws InterruptedException if interrupted during execution
-     */
-    private byte[] sendRequestWithRetryWrapper(com.google.protobuf.MessageLite request)
-            throws IOException, InterruptedException {
-        return sendRequestWithRetry(request, byte[].class, REQUEST_TIMEOUT_SEC);
-    }
-
-    /**
-     * Register the app with the gateway using PIN.
-     *
-     * @throws IOException if registration fails (e.g., invalid PIN)
-     * @throws InterruptedException if interrupted
-     */
-    private void registerApp() throws IOException, InterruptedException {
-        logger.debug("Registering app with gateway");
-
-        Zehnder.RegisterAppRequest.Builder builder = Zehnder.RegisterAppRequest.newBuilder();
-        builder.setUuid(com.google.protobuf.ByteString.copyFrom(uuidConverter.toBytes(connector.getClientUuid())));
-        builder.setPin(pinCode);
-        builder.setDevicename("openHAB");
-
-        // sendRequestWithRetry will retry up to 3 times with 5-second delays
-        // If gateway returns NOT_ALLOWED result, it will be caught as an error
-        sendRequestWithRetry(builder.build(), byte[].class, REQUEST_TIMEOUT_SEC);
-        logger.info("App registered successfully with UUID: {}", connector.getClientUuid());
-    }
-
-    /**
-     * Start a session with the gateway, with optional takeover of existing sessions.
-     *
-     * @throws IOException if start fails or session conflict exists
-     * @throws InterruptedException if interrupted
-     */
-    private void startSession() throws IOException, InterruptedException {
-        logger.debug("Starting session with gateway (autoTakeover={})", autoTakeover);
-
-        Zehnder.StartSessionRequest.Builder builder = Zehnder.StartSessionRequest.newBuilder();
-        builder.setTakeover(autoTakeover);
-
-        // sendRequestWithRetry will retry up to 3 times with 5-second delays
-        // For OTHER_SESSION result, we either allow it (if autoTakeover=true) or fail
-        sendRequestWithRetry(builder.build(), byte[].class, REQUEST_TIMEOUT_SEC);
-        logger.info("Session started successfully");
-    }
-
-    /**
-     * Close the session with the gateway.
-     *
-     * @throws IOException if close fails
-     */
-    private void closeSession() throws IOException {
-        logger.debug("Closing session with gateway");
-
-        Zehnder.CloseSessionRequest.Builder builder = Zehnder.CloseSessionRequest.newBuilder();
-
-        try {
-            byte[] frame = connector.getFramer().createFrame(GatewayOperation.newBuilder()
-                    .setType(GatewayOperation.OperationType.CloseSessionRequestType).build(), builder.build());
-            connector.sendMessage(frame);
-        } catch (IOException e) {
-            logger.debug("Error sending close session: {}", e.getMessage());
-        }
-
-        logger.debug("Session closed");
-    }
-
-    /**
-     * Set the callback to be invoked when keep-alive fails.
-     *
-     * @param callback the callback to invoke on keep-alive failure
-     */
-    public void setKeepAliveFailureCallback(final Runnable callback) {
-        this.onKeepAliveFailure = callback;
-    }
-
-    /**
-     * Set the callback to be invoked when a connection error occurs.
-     *
-     * @param callback the callback to invoke on connection error
-     */
-    public void setConnectionErrorCallback(final Runnable callback) {
-        this.connectionErrorCallback = callback;
-    }
-
-    /**
-     * Start the keep-alive timer.
-     */
-    private void startKeepAliveTimer() {
-        logger.debug("Starting keep-alive timer");
-
-        keepAliveTask = scheduler.scheduleAtFixedRate(this::sendKeepAlive, KEEPALIVE_INTERVAL_SEC,
-                KEEPALIVE_INTERVAL_SEC, TimeUnit.SECONDS);
-    }
-
-    /**
-     * Stop the keep-alive timer.
-     */
-    public void stopKeepAliveTimer() {
-        ScheduledFuture<?> task = keepAliveTask;
-        if (task != null) {
-            task.cancel(false);
-            keepAliveTask = null;
-        }
-    }
-
-    /**
-     * Send a keep-alive message.
-     */
-    private void sendKeepAlive() {
-        try {
-            int reference = allocateReference();
-            Zehnder.KeepAlive.Builder builder = Zehnder.KeepAlive.newBuilder();
-            byte[] frame = connector.getFramer().createFrame(GatewayOperation.newBuilder()
-                    .setType(GatewayOperation.OperationType.KeepAliveType).setReference(reference).build(),
-                    builder.build());
-            connector.sendMessage(frame);
-            logger.trace("Sent keep-alive message (reference {})", reference);
-        } catch (IOException e) {
-            logger.warn("Keep-alive failed: {}", e.getMessage());
-            Runnable callback = onKeepAliveFailure;
-            if (callback != null) {
-                callback.run();
-            }
-        }
-    }
-
-    /**
-     * Allocate a unique reference number for a request.
-     *
-     * @return a unique reference
-     */
-    private synchronized int allocateReference() {
-        int ref = nextReference++;
-        if (nextReference > MAX_REFERENCE) {
-            nextReference = 1;
-        }
-        return ref;
-    }
-
-    /**
-     * Complete a pending request with response data.
-     *
-     * @param reference the request reference
-     * @param payload the response payload
-     * @param result the gateway result from the operation
-     */
-    private void completeRequest(final int reference, final Payload payload, final GatewayResult result) {
-        PendingRequest<?> pending;
-
-        synchronized (pendingRequests) {
-            pending = pendingRequests.remove(reference);
-        }
-
-        if (pending == null) {
-            logger.trace("Received response for unknown reference: {}", reference);
-            return;
-        }
-
-        try {
-            // Check for gateway errors first
-            if (result != GatewayResult.OK) {
-                String errorMsg = getErrorMessageForResult(result);
-                pending.future.completeExceptionally(new IOException(errorMsg));
-                return;
-            }
-
-            // Parse response based on expected type
-            Object response = parseResponse(pending.responseClass, payload);
-            @SuppressWarnings("unchecked")
-            PendingRequest<Object> typedPending = (PendingRequest<Object>) pending;
-            typedPending.future.complete(response);
-        } catch (Exception e) {
-            pending.future.completeExceptionally(e);
-        }
-    }
-
-    /**
-     * Get a human-readable error message for a gateway result.
-     *
-     * @param result the gateway result
-     * @return error message
-     */
-    private String getErrorMessageForResult(final GatewayResult result) {
-        return switch (result) {
-            case OK -> "No error";
-            case BAD_REQUEST -> "Gateway error: BAD_REQUEST (something wrong with the request)";
-            case INTERNAL_ERROR -> "Gateway error: INTERNAL_ERROR (request was OK but handling failed)";
-            case NOT_REACHABLE -> "Gateway error: NOT_REACHABLE (backend cannot route the request)";
-            case OTHER_SESSION -> "Gateway error: OTHER_SESSION (another session already active)";
-            case NOT_ALLOWED -> "Gateway error: NOT_ALLOWED (invalid PIN or permission denied)";
-            case NO_RESOURCES -> "Gateway error: NO_RESOURCES (not enough memory)";
-            case NOT_EXIST -> "Gateway error: NOT_EXIST (ComfoNet node or property does not exist)";
-            case RMI_ERROR -> "Gateway error: RMI_ERROR (RMI communication failed)";
-        };
-    }
-
-    /**
-     * Handle a request timeout.
-     *
-     * @param reference the request reference that timed out
-     */
-    private void handleRequestTimeout(final int reference) {
-        PendingRequest<?> pending;
-
-        synchronized (pendingRequests) {
-            pending = pendingRequests.remove(reference);
-        }
-
-        if (pending != null) {
-            pending.future.completeExceptionally(
-                    new TimeoutException("Request " + reference + " timed out after " + REQUEST_TIMEOUT_SEC + "s"));
-            logger.warn("Request {} timed out", reference);
         }
     }
 
@@ -608,131 +598,6 @@ public class ComfoConnectProtocolHandler {
     }
 
     /**
-     * Clear all pending requests (on shutdown).
-     */
-    private void clearPendingRequests() {
-        synchronized (pendingRequests) {
-            for (PendingRequest<?> pending : pendingRequests.values()) {
-                pending.future.completeExceptionally(new IOException("Protocol handler shut down"));
-            }
-
-            pendingRequests.clear();
-        }
-    }
-
-    /**
-     * Parse response based on expected type.
-     *
-     * @param responseClass the expected response class
-     * @param payload the payload
-     * @return parsed response object
-     */
-    private Object parseResponse(final Class<?> responseClass, final Payload payload) throws IOException {
-        if (responseClass == byte[].class) {
-            return payload.content;
-        }
-
-        throw new IOException("Unknown response type: " + responseClass.getName());
-    }
-
-    /**
-     * Set the operation type in GatewayOperation based on request type.
-     *
-     * @param builder the GatewayOperation builder
-     * @param request the request message
-     */
-    private void setOperationType(final GatewayOperation.Builder builder, final MessageLite request) {
-        String requestType = request.getClass().getSimpleName();
-
-        if (requestType.contains("RegisterApp")) {
-            builder.setType(GatewayOperation.OperationType.RegisterAppRequestType);
-        } else if (requestType.contains("StartSession")) {
-            builder.setType(GatewayOperation.OperationType.StartSessionRequestType);
-        } else if (requestType.contains("ListRegisteredApps")) {
-            builder.setType(GatewayOperation.OperationType.ListRegisteredAppsRequestType);
-        } else if (requestType.contains("KeepAlive")) {
-            builder.setType(GatewayOperation.OperationType.KeepAliveType);
-        }
-        // Add other types as needed
-    }
-
-    public boolean isSessionActive() {
-        return sessionActive;
-    }
-
-    /**
-     * Subscribe to a sensor.
-     * This is the generic method that replaces all individual subscribeToXxxSensor methods.
-     *
-     * @param sensor the sensor to subscribe to
-     * @param sensorType the sensor data type (from SensorValueType)
-     */
-    public void subscribeToSensor(final Sensor sensor, final SensorValueType sensorType) {
-        try {
-            logger.info("Subscribing to sensor {} (PDO {} type {})", sensor, sensor.id, sensorType.value);
-            connector.sendRpdoRequest(sensor.id, sensorType.value);
-            logger.info("Sensor {} subscription request sent successfully", sensor);
-        } catch (IOException e) {
-            logger.warn("Failed to subscribe to sensor {}: {}", sensor, e.getMessage());
-            // Check if this is a connection-related error and trigger reconnection
-            handleConnectionError(e);
-        }
-    }
-
-    /**
-     * Unsubscribe from a sensor.
-     * This sends a CnRpdoRequest without the type field, which according to the protocol
-     * will delete a previously registered RPDO with the given PDID.
-     *
-     * @param sensor the sensor to unsubscribe from
-     */
-    public void unsubscribeFromSensor(final Sensor sensor) {
-        try {
-            logger.info("Unsubscribing from sensor {} (PDO {})", sensor, sensor.id);
-            connector.sendRpdoUnsubscribe(sensor.id);
-            logger.info("Sensor {} unsubscribe request sent successfully", sensor);
-        } catch (IOException e) {
-            logger.warn("Failed to unsubscribe from sensor {}: {}", sensor, e.getMessage());
-            // Check if this is a connection-related error and trigger reconnection
-            handleConnectionError(e);
-        }
-    }
-
-    /**
-     * Send an RMI request to the gateway using the discovered ventilation node ID.
-     *
-     * @param unit the RMI unit ID (e.g., UNIT_SCHEDULE = 0x08)
-     * @param subunit the RMI subunit ID (e.g., SUBUNIT_02 = 0x02)
-     * @param propertyId the RMI property ID (e.g., 0x01 for bypass state)
-     * @throws IOException if send fails
-     */
-    public void sendRmiRequest(final int unit, final int subunit, final int propertyId) throws IOException {
-        sendRmiRequest(getVentilationNodeId(), unit, subunit, propertyId);
-    }
-
-    /**
-     * Send an RMI request to the gateway with a specific node ID.
-     *
-     * @param nodeId the ComfoNet node ID (typically 1 for ventilation unit)
-     * @param unit the RMI unit ID (e.g., UNIT_SCHEDULE = 0x08)
-     * @param subunit the RMI subunit ID (e.g., SUBUNIT_02 = 0x02)
-     * @param propertyId the RMI property ID (e.g., 0x01 for bypass state)
-     * @throws IOException if send fails
-     */
-    public void sendRmiRequest(final int nodeId, final int unit, final int subunit, final int propertyId)
-            throws IOException {
-        // Construct RMI message payload: 0x83 (read request), unit, subunit, propertyId
-        byte[] rmiMessage = new byte[] { (byte) 0x83, (byte) unit, (byte) subunit, (byte) propertyId };
-
-        try {
-            connector.sendRmiRequest(nodeId, rmiMessage);
-        } catch (IOException e) {
-            handleConnectionError(e);
-            throw e;
-        }
-    }
-
-    /**
      * Handle incoming node notification to discover the ventilation unit.
      *
      * @param payload the node notification payload
@@ -745,12 +610,8 @@ public class ComfoConnectProtocolHandler {
 
             logger.debug("Node notification: nodeId={}, productId={}", nodeId, productId);
 
-            // Check if this is a ventilation unit (product IDs for Q-Series)
-            // Common ventilation unit product IDs: 0x01, 0x02, 0x03, etc.
-            // For now, assume node ID 1 is the ventilation unit if we haven't discovered it yet
-            if (ventilationNodeId == null) {
-                setVentilationNodeId(nodeId);
-            }
+            // Set the ventilation node ID
+            setVentilationNodeId(nodeId);
         } catch (Exception e) {
             logger.error("Error handling node notification: {}", e.getMessage(), e);
         }
@@ -822,7 +683,7 @@ public class ComfoConnectProtocolHandler {
 
             if (callback != null) {
                 // Use the BYPASS_STATE sensor (if defined)
-                Sensors.findByChannelId(ComfoAirBindingConstants.CHANNEL_BYPASS_STATE).ifPresent(sensor -> {
+                Sensors.findByChannelId("bypassState").ifPresent(sensor -> {
                     // Create a pseudo-RPDO notification for the sensor callback
                     Zehnder.CnRpdoNotification message = Zehnder.CnRpdoNotification.newBuilder().setPdid(sensor.id)
                             .setData(com.google.protobuf.ByteString.copyFrom(new byte[] { (byte) state })).build();
@@ -835,12 +696,68 @@ public class ComfoConnectProtocolHandler {
     }
 
     /**
+     * Subscribe to a sensor.
+     * This is the generic method that replaces all individual subscribeToXxxSensor methods.
+     *
+     * @param sensor the sensor to subscribe to
+     * @param sensorType the sensor data type (from SensorValueType)
+     */
+    public void subscribeToSensor(final Sensor sensor, final SensorValueType sensorType) {
+        sensorSubscriptionManager.subscribeToSensor(sensor, sensorType);
+    }
+
+    /**
+     * Unsubscribe from a sensor.
+     * This sends a CnRpdoRequest without the type field, which according to the protocol
+     * will delete a previously registered RPDO with the given PDID.
+     *
+     * @param sensor the sensor to unsubscribe from
+     */
+    public void unsubscribeFromSensor(final Sensor sensor) {
+        sensorSubscriptionManager.unsubscribeFromSensor(sensor);
+    }
+
+    /**
+     * Send an RMI request to the gateway using the discovered ventilation node ID.
+     *
+     * @param unit the RMI unit ID (e.g., UNIT_SCHEDULE = 0x08)
+     * @param subunit the RMI subunit ID (e.g., SUBUNIT_02 = 0x02)
+     * @param propertyId the RMI property ID (e.g., 0x01 for bypass state)
+     * @throws IOException if send fails
+     */
+    public void sendRmiRequest(final int unit, final int subunit, final int propertyId) throws IOException {
+        sendRmiRequest(getVentilationNodeId(), unit, subunit, propertyId);
+    }
+
+    /**
+     * Send an RMI request to the gateway with a specific node ID.
+     *
+     * @param nodeId the ComfoNet node ID (typically 1 for ventilation unit)
+     * @param unit the RMI unit ID (e.g., UNIT_SCHEDULE = 0x08)
+     * @param subunit the RMI subunit ID (e.g., SUBUNIT_02 = 0x02)
+     * @param propertyId the RMI property ID (e.g., 0x01 for bypass state)
+     * @throws IOException if send fails
+     */
+    public void sendRmiRequest(final int nodeId, final int unit, final int subunit, final int propertyId)
+            throws IOException {
+        // Construct RMI message payload: 0x83 (read request), unit, subunit, propertyId
+        byte[] rmiMessage = new byte[] { (byte) 0x83, (byte) unit, (byte) subunit, (byte) propertyId };
+
+        try {
+            connector.sendRmiRequest(nodeId, rmiMessage);
+        } catch (IOException e) {
+            handleConnectionError(e);
+            throw e;
+        }
+    }
+
+    /**
      * Check if an error message indicates a connection error that should trigger reconnection.
      *
      * @param errorMsg the error message to check
      * @return true if the error is connection-related, false otherwise
      */
-    public boolean isConnectionError(final String errorMsg) {
+    public boolean isConnectionError(final @Nullable String errorMsg) {
         return errorMsg != null && (errorMsg.contains("Not connected to gateway") || errorMsg.contains("connection")
                 || errorMsg.contains("socket"));
     }
@@ -874,20 +791,6 @@ public class ComfoConnectProtocolHandler {
     }
 
     /**
-     * Convert UUID to bytes.
-     *
-     * @param uuid the UUID
-     * @return 16 bytes
-     */
-
-    /**
-     * Convert bytes to UUID.
-     *
-     * @param bytes the 16 bytes
-     * @return UUID object
-     */
-
-    /**
      * Discover the ventilation node ID by sending a CnNodeRequest.
      * This will trigger CnNodeNotification messages from the gateway.
      */
@@ -909,12 +812,8 @@ public class ComfoConnectProtocolHandler {
      * @return the ventilation node ID, or 1 if not discovered
      */
     public int getVentilationNodeId() {
-        if (ventilationNodeId != null) {
-            return ventilationNodeId;
-        }
-
-        // Fallback to node ID 1 if not discovered yet
-        return 1;
+        Integer nodeId = ventilationNodeId;
+        return nodeId != null ? nodeId : 1;
     }
 
     /**

@@ -41,7 +41,7 @@ public class TestComfoConnectConnector extends ComfoConnectConnector {
     }
 
     @Override
-    public UUID getClientUuid() {
+    public UUID clientUuid() {
         return UUID.randomUUID();
     }
 }
