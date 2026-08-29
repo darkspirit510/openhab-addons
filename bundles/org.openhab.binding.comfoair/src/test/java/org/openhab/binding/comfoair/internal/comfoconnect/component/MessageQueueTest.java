@@ -26,14 +26,14 @@ import org.openhab.binding.comfoair.internal.comfoconnect.misc.HexConverter;
 import org.openhab.binding.comfoair.internal.comfoconnect.misc.ProtobufFramer;
 
 /**
- * Unit tests for {@link Messages}.
+ * Unit tests for {@link MessageQueue}.
  *
  * @author Sascha Knoop - Initial contribution
  */
 @DisplayName("Messages")
-class MessagesTest {
+class MessageQueueTest {
 
-    private Messages messages;
+    private MessageQueue messageQueue;
     private ComfoConnectConnector mockConnector;
     private ProtobufFramer mockFramer;
     private HexConverter mockHexConverter;
@@ -48,43 +48,44 @@ class MessagesTest {
         mockProtocolHandler = mock(ComfoConnectProtocolHandler.class);
         mockScheduler = mock(ScheduledExecutorService.class);
 
-        messages = new Messages(mockConnector, mockFramer, mockHexConverter, mockProtocolHandler, mockScheduler);
+        messageQueue = new MessageQueue(mockConnector, mockFramer, mockHexConverter, mockProtocolHandler,
+                mockScheduler);
     }
 
     @Test
     @DisplayName("Constructor creates instance")
     void testConstructor() {
-        assertNotNull(messages);
+        assertNotNull(messageQueue);
     }
 
     @Test
     @DisplayName("Queue message returns true for valid message")
     void testQueueMessage() {
         byte[] message = new byte[] { 0x01, 0x02, 0x03 };
-        assertTrue(messages.queueMessage(message));
+        assertTrue(messageQueue.queueMessage(message));
     }
 
     @Test
     @DisplayName("Queue message returns false when shutdown")
     void testQueueMessageWhenShutdown() {
-        messages.setShutdown(true);
+        messageQueue.setShutdown(true);
         byte[] message = new byte[] { 0x01, 0x02, 0x03 };
-        assertFalse(messages.queueMessage(message));
+        assertFalse(messageQueue.queueMessage(message));
     }
 
     @Test
     @DisplayName("Clear queue works")
     void testClearQueue() {
-        messages.queueMessage(new byte[] { 0x01 });
-        messages.clearQueue();
+        messageQueue.queueMessage(new byte[] { 0x01 });
+        messageQueue.clearQueue();
         // Queue should be empty now
-        assertNull(messages.pollMessage(10));
+        assertNull(messageQueue.pollMessage(10));
     }
 
     @Test
     @DisplayName("Poll message with timeout returns null when queue is empty")
     void testPollMessageEmptyQueue() {
-        Object result = messages.pollMessage(10);
+        Object result = messageQueue.pollMessage(10);
         assertNull(result);
     }
 
@@ -93,15 +94,15 @@ class MessagesTest {
     void testCustomCapacityConstructor() {
         // Messages uses default capacity, but we can test that it accepts messages
         byte[] message = new byte[] { 0x01, 0x02, 0x03 };
-        assertTrue(messages.queueMessage(message));
+        assertTrue(messageQueue.queueMessage(message));
     }
 
     @Test
     @DisplayName("Queue and poll message works")
     void testQueueAndPollMessage() {
         byte[] message = new byte[] { 0x01, 0x02, 0x03 };
-        messages.queueMessage(message);
-        byte[] polled = messages.pollMessage(100);
+        messageQueue.queueMessage(message);
+        byte[] polled = messageQueue.pollMessage(100);
         assertNotNull(polled);
         assertArrayEquals(message, polled);
     }
@@ -109,12 +110,12 @@ class MessagesTest {
     @Test
     @DisplayName("getFramer returns the framer")
     void testGetFramer() {
-        assertEquals(mockFramer, messages.getFramer());
+        assertEquals(mockFramer, messageQueue.getFramer());
     }
 
     @Test
     @DisplayName("getMessageQueue returns non-null queue")
     void testGetMessageQueue() {
-        assertNotNull(messages.getMessageQueue());
+        assertNotNull(messageQueue.getMessageQueue());
     }
 }

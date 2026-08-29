@@ -36,9 +36,9 @@ import com.zehnder.proto.Zehnder.GatewayOperation.OperationType;
  * @author Sascha Knoop - Initial contribution
  */
 @NonNullByDefault
-public class Messages implements MessageQueueManager, MessageConsumer {
+public class MessageQueue implements MessageQueueManager, MessageConsumer {
 
-    private final Logger logger = LoggerFactory.getLogger(Messages.class);
+    private final Logger logger = LoggerFactory.getLogger(MessageQueue.class);
 
     private static final int DEFAULT_QUEUE_CAPACITY = 100;
 
@@ -64,8 +64,9 @@ public class Messages implements MessageQueueManager, MessageConsumer {
      * @param protocolHandler the protocol handler for processing incoming messages
      * @param scheduler executor for running the consumer task
      */
-    public Messages(final ComfoConnectConnector connector, final ProtobufFramer framer, final HexConverter hexConverter,
-            final ComfoConnectProtocolHandler protocolHandler, final ScheduledExecutorService scheduler) {
+    public MessageQueue(final ComfoConnectConnector connector, final ProtobufFramer framer,
+            final HexConverter hexConverter, final ComfoConnectProtocolHandler protocolHandler,
+            final ScheduledExecutorService scheduler) {
         this.connector = connector;
         this.framer = framer;
         this.hexConverter = hexConverter;

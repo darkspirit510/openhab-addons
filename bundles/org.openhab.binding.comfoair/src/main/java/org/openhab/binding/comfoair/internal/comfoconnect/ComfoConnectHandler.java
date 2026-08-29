@@ -19,10 +19,9 @@ import java.util.UUID;
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.comfoair.internal.ComfoAirBindingConstants;
+import org.openhab.binding.comfoair.internal.comfoconnect.component.BypassStateWorker;
 import org.openhab.binding.comfoair.internal.comfoconnect.component.Gateway;
-import org.openhab.binding.comfoair.internal.comfoconnect.component.Messages;
-import org.openhab.binding.comfoair.internal.comfoconnect.misc.BypassStateManager;
-import org.openhab.binding.comfoair.internal.comfoconnect.misc.BypassStateManagerImpl;
+import org.openhab.binding.comfoair.internal.comfoconnect.component.MessageQueue;
 import org.openhab.binding.comfoair.internal.comfoconnect.misc.ChannelManager;
 import org.openhab.binding.comfoair.internal.comfoconnect.misc.ChannelManagerImpl;
 import org.openhab.binding.comfoair.internal.comfoconnect.misc.ConnectionManager;
@@ -58,8 +57,8 @@ public class ComfoConnectHandler extends BaseThingHandler {
     private final Gateway gateway = new Gateway();
     private @Nullable SensorDataHandler sensorDataHandler;
 
-    private @Nullable Messages messages;
-    private @Nullable BypassStateManager bypassStateManager;
+    private @Nullable MessageQueue messageQueue;
+    private @Nullable BypassStateWorker bypassStateWorker;
     private @Nullable ConnectionManager connectionManager;
     private @Nullable ChannelManager channelManager;
 
@@ -164,16 +163,16 @@ public class ComfoConnectHandler extends BaseThingHandler {
 
         // Create Messages instance with all dependencies
         ComfoConnectProtocolHandler handler = Objects.requireNonNull(this.protocolHandler);
-        this.messages = new Messages(connector, connector.getFramer(), new HexConverter(), handler, scheduler);
-        connector.setMessages(this.messages);
-        this.bypassStateManager = new BypassStateManagerImpl(handler, scheduler, this::isConnected);
+        this.messageQueue = new MessageQueue(connector, connector.getFramer(), new HexConverter(), handler, scheduler);
+        connector.setMessages(this.messageQueue);
+        this.bypassStateWorker = new BypassStateWorker(handler, scheduler, this::isConnected);
         this.connectionManager = new ConnectionManagerImpl(this::connect,
                 () -> updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
                         "Gateway connection lost: Keep-alive timeout"),
                 () -> updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
                         "Gateway connection lost: Communication error"),
                 handler);
-        this.channelManager = new ChannelManagerImpl(handler, getThing(), this::isLinked, bypassStateManager,
+        this.channelManager = new ChannelManagerImpl(handler, getThing(), this::isLinked, bypassStateWorker,
                 this::isConnected, this::updateState);
         this.sensorDataHandler = new SensorDataHandlerImpl(
                 sensor -> this.channelManager != null && this.channelManager.isSensorSubscribed(sensor),
@@ -219,7 +218,7 @@ public class ComfoConnectHandler extends BaseThingHandler {
 
             // Start the message consumer loop BEFORE protocol initialization
             // so responses can be received and processed
-            Messages msgs = this.messages;
+            MessageQueue msgs = this.messageQueue;
             if (msgs != null) {
                 msgs.startMessageConsumer();
             }
@@ -290,7 +289,7 @@ public class ComfoConnectHandler extends BaseThingHandler {
             manager.cancelReconnectAttempt();
         }
 
-        Messages msgs = this.messages;
+        MessageQueue msgs = this.messageQueue;
         if (msgs != null) {
             msgs.stopMessageConsumer();
         }
@@ -306,7 +305,7 @@ public class ComfoConnectHandler extends BaseThingHandler {
         }
 
         // Stop bypass state polling
-        BypassStateManager bypassMgr = this.bypassStateManager;
+        BypassStateWorker bypassMgr = this.bypassStateWorker;
         if (bypassMgr != null) {
             bypassMgr.stopBypassStatePolling();
         }

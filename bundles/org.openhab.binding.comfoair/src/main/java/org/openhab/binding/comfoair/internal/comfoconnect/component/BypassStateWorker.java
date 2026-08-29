@@ -10,7 +10,7 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  */
-package org.openhab.binding.comfoair.internal.comfoconnect.misc;
+package org.openhab.binding.comfoair.internal.comfoconnect.component;
 
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -29,9 +29,9 @@ import org.slf4j.LoggerFactory;
  * @author Sascha Knoop - Initial contribution
  */
 @NonNullByDefault
-public class BypassStateManagerImpl implements BypassStateManager {
+public class BypassStateWorker {
 
-    private final Logger logger = LoggerFactory.getLogger(BypassStateManagerImpl.class);
+    private final Logger logger = LoggerFactory.getLogger(BypassStateWorker.class);
 
     private static final int BYPASS_STATE_POLL_INTERVAL_SEC = 30;
 
@@ -48,14 +48,13 @@ public class BypassStateManagerImpl implements BypassStateManager {
      * @param scheduler executor for scheduling polling tasks
      * @param isConnectedCallback callback to check if connected
      */
-    public BypassStateManagerImpl(final ComfoConnectProtocolHandler protocolHandler,
+    public BypassStateWorker(final ComfoConnectProtocolHandler protocolHandler,
             final ScheduledExecutorService scheduler, final Runnable isConnectedCallback) {
         this.protocolHandler = protocolHandler;
         this.scheduler = scheduler;
         this.isConnectedCallback = isConnectedCallback;
     }
 
-    @Override
     public void startBypassStatePolling() {
         if (bypassStatePollingTask != null) {
             return; // Already running
@@ -75,7 +74,6 @@ public class BypassStateManagerImpl implements BypassStateManager {
         }, 0, BYPASS_STATE_POLL_INTERVAL_SEC, TimeUnit.SECONDS);
     }
 
-    @Override
     public void stopBypassStatePolling() {
         ScheduledFuture<?> task = bypassStatePollingTask;
         if (task != null) {

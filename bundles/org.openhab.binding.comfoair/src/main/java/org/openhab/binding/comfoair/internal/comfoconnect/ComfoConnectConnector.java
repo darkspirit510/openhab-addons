@@ -17,11 +17,11 @@ import java.util.UUID;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
-import org.openhab.binding.comfoair.internal.comfoconnect.component.Messages;
+import org.openhab.binding.comfoair.internal.comfoconnect.component.MessageQueue;
 import org.openhab.binding.comfoair.internal.comfoconnect.component.ReaderThread;
+import org.openhab.binding.comfoair.internal.comfoconnect.component.SocketWrapper;
 import org.openhab.binding.comfoair.internal.comfoconnect.misc.HexConverter;
 import org.openhab.binding.comfoair.internal.comfoconnect.misc.ProtobufFramer;
-import org.openhab.binding.comfoair.internal.comfoconnect.misc.SocketManagerImpl;
 import org.openhab.binding.comfoair.internal.comfoconnect.sensor.Sensors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,10 +51,10 @@ public class ComfoConnectConnector {
     private final int port;
     private final UUID clientUuid;
 
-    private final SocketManagerImpl socketManager;
+    private final SocketWrapper socketManager;
     private final ProtobufFramer framer;
     private final HexConverter hexConverter = new HexConverter();
-    private @Nullable Messages messages;
+    private @Nullable MessageQueue messageQueue;
     private @Nullable ReaderThread readerThread;
 
     protected volatile boolean isConnected = false;
@@ -87,17 +87,17 @@ public class ComfoConnectConnector {
         this.port = port;
         this.clientUuid = clientUuid;
         this.framer = new ProtobufFramer(clientUuid, gatewayUuid);
-        this.socketManager = new SocketManagerImpl(hostname, port);
+        this.socketManager = new SocketWrapper(hostname, port);
     }
 
     /**
      * Set the Messages instance for this connector.
      * This must be called before connect() to enable message queuing and consumption.
      *
-     * @param messages the Messages instance to use
+     * @param messageQueue the Messages instance to use
      */
-    public void setMessages(final @Nullable Messages messages) {
-        this.messages = messages;
+    public void setMessages(final @Nullable MessageQueue messageQueue) {
+        this.messageQueue = messageQueue;
     }
 
     /**
@@ -116,8 +116,8 @@ public class ComfoConnectConnector {
             socketManager.connect();
 
             // Initialize reader thread manager with the new input stream
-            if (messages != null) {
-                readerThread = new ReaderThread(socketManager.getInputStream(), messages);
+            if (messageQueue != null) {
+                readerThread = new ReaderThread(socketManager.getInputStream(), messageQueue);
                 readerThread.start();
             }
 
@@ -141,8 +141,8 @@ public class ComfoConnectConnector {
         logger.info("Disconnecting from ComfoConnect gateway");
         isShutdown = true;
 
-        if (messages != null) {
-            messages.setShutdown(true);
+        if (messageQueue != null) {
+            messageQueue.setShutdown(true);
         }
 
         if (this.readerThread != null) {
@@ -162,8 +162,8 @@ public class ComfoConnectConnector {
      * @throws IOException if send fails
      */
     public void sendMessage(final byte[] message) throws IOException {
-        if (messages != null) {
-            messages.sendMessage(message);
+        if (messageQueue != null) {
+            messageQueue.sendMessage(message);
         } else {
             // Fallback to direct socket send if messages not set
             socketManager.sendMessage(message);
@@ -178,8 +178,8 @@ public class ComfoConnectConnector {
      * @throws IOException if send fails
      */
     public void sendRpdoRequest(final int pdid, final int type) throws IOException {
-        if (messages != null) {
-            messages.sendRpdoRequest(pdid, type);
+        if (messageQueue != null) {
+            messageQueue.sendRpdoRequest(pdid, type);
         }
         Sensors.findById(pdid).ifPresentOrElse(sensor -> logger.info("RPDO request sent for sensor {}", sensor),
                 () -> logger.info("RPDO request sent for sensor ??? ({})", pdid));
@@ -194,8 +194,8 @@ public class ComfoConnectConnector {
      * @throws IOException if send fails
      */
     public void sendRpdoUnsubscribe(final int pdid) throws IOException {
-        if (messages != null) {
-            messages.sendRpdoUnsubscribe(pdid);
+        if (messageQueue != null) {
+            messageQueue.sendRpdoUnsubscribe(pdid);
         }
         Sensors.findById(pdid).ifPresentOrElse(sensor -> logger.info("RPDO unsubscribe sent for sensor {}", sensor),
                 () -> logger.info("RPDO unsubscribe sent for sensor ??? ({})", pdid));
@@ -209,8 +209,8 @@ public class ComfoConnectConnector {
      * @throws IOException if send fails
      */
     public void sendRmiRequest(final int nodeId, final byte[] rmiMessage) throws IOException {
-        if (messages != null) {
-            messages.sendRmiRequest(nodeId, rmiMessage);
+        if (messageQueue != null) {
+            messageQueue.sendRmiRequest(nodeId, rmiMessage);
         }
         logger.info("RMI request sent for node {}: {}", nodeId, new HexConverter().toHex(rmiMessage));
     }
@@ -230,8 +230,8 @@ public class ComfoConnectConnector {
      * @return the next message, or null if interrupted
      */
     public byte @org.eclipse.jdt.annotation.Nullable [] getNextMessage() {
-        if (messages != null) {
-            return messages.getNextMessage();
+        if (messageQueue != null) {
+            return messageQueue.getNextMessage();
         }
         return null;
     }

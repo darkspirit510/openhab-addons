@@ -10,7 +10,7 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  */
-package org.openhab.binding.comfoair.internal.comfoconnect.misc;
+package org.openhab.binding.comfoair.internal.comfoconnect.component;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -30,9 +30,9 @@ import org.slf4j.LoggerFactory;
  * @author Sascha Knoop - Initial contribution
  */
 @NonNullByDefault
-public class SocketManagerImpl implements SocketManager {
+public class SocketWrapper {
 
-    private final Logger logger = LoggerFactory.getLogger(SocketManagerImpl.class);
+    private final Logger logger = LoggerFactory.getLogger(SocketWrapper.class);
 
     private static final int BLOCKING_READ_TIMEOUT = 0;
     private static final int CONNECT_TIMEOUT_MS = 5000;
@@ -52,12 +52,11 @@ public class SocketManagerImpl implements SocketManager {
      * @param hostname the gateway hostname or IP address
      * @param port the gateway TCP port
      */
-    public SocketManagerImpl(final String hostname, final int port) {
+    public SocketWrapper(final String hostname, final int port) {
         this.hostname = hostname;
         this.port = port;
     }
 
-    @Override
     public void connect() throws IOException {
         logger.info("Connecting to ComfoConnect gateway at {}:{}", hostname, port);
 
@@ -83,7 +82,6 @@ public class SocketManagerImpl implements SocketManager {
         return socket;
     }
 
-    @Override
     public void disconnect() {
         logger.info("Disconnecting from ComfoConnect gateway");
         cleanup();
@@ -91,7 +89,6 @@ public class SocketManagerImpl implements SocketManager {
         logger.info("Disconnected from ComfoConnect gateway");
     }
 
-    @Override
     public void cleanup() {
         if (this.inputStream != null) {
             try {
@@ -122,7 +119,6 @@ public class SocketManagerImpl implements SocketManager {
         this.outputStream = null;
     }
 
-    @Override
     public void sendMessage(final byte[] message) throws IOException {
         DataOutputStream out = this.outputStream;
         if (out == null || socket == null || !isConnected) {
@@ -143,23 +139,7 @@ public class SocketManagerImpl implements SocketManager {
         }
     }
 
-    @Override
-    public @Nullable Socket getSocket() {
-        return socket;
-    }
-
-    @Override
     public @Nullable DataInputStream getInputStream() {
         return inputStream;
-    }
-
-    @Override
-    public @Nullable DataOutputStream getOutputStream() {
-        return outputStream;
-    }
-
-    @Override
-    public boolean isConnected() {
-        return isConnected;
     }
 }

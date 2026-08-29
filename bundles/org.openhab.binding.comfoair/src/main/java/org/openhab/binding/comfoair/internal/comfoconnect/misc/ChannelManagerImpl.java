@@ -22,6 +22,7 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.comfoair.internal.ComfoAirBindingConstants;
 import org.openhab.binding.comfoair.internal.comfoconnect.ComfoConnectProtocolHandler;
+import org.openhab.binding.comfoair.internal.comfoconnect.component.BypassStateWorker;
 import org.openhab.binding.comfoair.internal.comfoconnect.sensor.BitmaskSensor;
 import org.openhab.binding.comfoair.internal.comfoconnect.sensor.Sensor;
 import org.openhab.binding.comfoair.internal.comfoconnect.sensor.Sensors;
@@ -46,7 +47,7 @@ public class ChannelManagerImpl implements ChannelManager {
     private final Thing thing;
     private final Predicate<ChannelUID> isLinkedPredicate;
     private final Supplier<Boolean> isConnectedSupplier;
-    private final @Nullable BypassStateManager bypassStateManager;
+    private final @Nullable BypassStateWorker bypassStateWorker;
     private final BiConsumer<ChannelUID, State> updateStateCallback;
 
     // Track which sensors have at least one linked channel
@@ -61,17 +62,17 @@ public class ChannelManagerImpl implements ChannelManager {
      * @param protocolHandler the protocol handler for sensor subscriptions
      * @param thing the thing this manager is associated with
      * @param isLinkedPredicate predicate to check if a channel is linked
-     * @param bypassStateManager the bypass state manager
+     * @param bypassStateWorker the bypass state manager
      * @param isConnectedSupplier supplier to check if connected
      * @param updateStateCallback callback to update channel state
      */
     public ChannelManagerImpl(final ComfoConnectProtocolHandler protocolHandler, final Thing thing,
-            final Predicate<ChannelUID> isLinkedPredicate, final @Nullable BypassStateManager bypassStateManager,
+            final Predicate<ChannelUID> isLinkedPredicate, final @Nullable BypassStateWorker bypassStateWorker,
             final Supplier<Boolean> isConnectedSupplier, final BiConsumer<ChannelUID, State> updateStateCallback) {
         this.protocolHandler = protocolHandler;
         this.thing = thing;
         this.isLinkedPredicate = isLinkedPredicate;
-        this.bypassStateManager = bypassStateManager;
+        this.bypassStateWorker = bypassStateWorker;
         this.isConnectedSupplier = isConnectedSupplier;
         this.updateStateCallback = updateStateCallback;
     }
@@ -107,9 +108,8 @@ public class ChannelManagerImpl implements ChannelManager {
 
                     // Start polling for bypass state if this is the bypassState channel
                     if (ComfoAirBindingConstants.CHANNEL_BYPASS_STATE.equals(channelId)) {
-                        BypassStateManager mgr = this.bypassStateManager;
-                        if (mgr != null) {
-                            mgr.startBypassStatePolling();
+                        if (this.bypassStateWorker != null) {
+                            this.bypassStateWorker.startBypassStatePolling();
                         }
                     }
                 }, () -> logger.warn("Channel {} linked but no sensor mapping found", channelId)),
@@ -151,9 +151,8 @@ public class ChannelManagerImpl implements ChannelManager {
 
                         // Stop polling for bypass state if this is the bypassState channel
                         if (ComfoAirBindingConstants.CHANNEL_BYPASS_STATE.equals(channelId)) {
-                            BypassStateManager mgr = this.bypassStateManager;
-                            if (mgr != null) {
-                                mgr.stopBypassStatePolling();
+                            if (this.bypassStateWorker != null) {
+                                this.bypassStateWorker.stopBypassStatePolling();
                             }
                         }
                     }, () -> logger.debug("Channel {} unlinked but no sensor mapping found", channelId));
@@ -181,9 +180,8 @@ public class ChannelManagerImpl implements ChannelManager {
                     subscribeToSensorForChannel(sensor);
                     // Start polling for bypass state if this is the bypassState channel
                     if (ComfoAirBindingConstants.CHANNEL_BYPASS_STATE.equals(channel.getUID().getId())) {
-                        BypassStateManager mgr = this.bypassStateManager;
-                        if (mgr != null) {
-                            mgr.startBypassStatePolling();
+                        if (this.bypassStateWorker != null) {
+                            this.bypassStateWorker.startBypassStatePolling();
                         }
                     }
                 });

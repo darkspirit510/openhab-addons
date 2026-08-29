@@ -37,7 +37,7 @@ public class ReaderThread {
     private static final int SOCKET_TIMEOUT_MS = 0; // No timeout - use blocking reads instead
 
     private final @Nullable DataInputStream inputStream;
-    private final @Nullable Messages messages;
+    private final @Nullable MessageQueue messageQueue;
 
     private @Nullable Thread readerThread;
     private final Object readerThreadLock = new Object();
@@ -47,11 +47,11 @@ public class ReaderThread {
      * Create a new reader thread manager.
      *
      * @param inputStream the input stream to read from
-     * @param messages the Messages instance for queueing messages
+     * @param messageQueue the Messages instance for queueing messages
      */
-    public ReaderThread(final @Nullable DataInputStream inputStream, final @Nullable Messages messages) {
+    public ReaderThread(final @Nullable DataInputStream inputStream, final @Nullable MessageQueue messageQueue) {
         this.inputStream = inputStream;
-        this.messages = messages;
+        this.messageQueue = messageQueue;
     }
 
     public void start() {
@@ -134,7 +134,7 @@ public class ReaderThread {
 
                     in.readFully(frameData, 4, totalLength);
 
-                    if (!messages.queueMessage(frameData)) {
+                    if (!messageQueue.queueMessage(frameData)) {
                         logger.warn("Message queue full, dropping message");
                     }
 
