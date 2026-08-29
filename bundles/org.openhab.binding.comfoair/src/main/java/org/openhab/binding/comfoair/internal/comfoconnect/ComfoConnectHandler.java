@@ -27,8 +27,7 @@ import org.openhab.binding.comfoair.internal.comfoconnect.misc.ChannelManagerImp
 import org.openhab.binding.comfoair.internal.comfoconnect.misc.ConnectionManager;
 import org.openhab.binding.comfoair.internal.comfoconnect.misc.ConnectionManagerImpl;
 import org.openhab.binding.comfoair.internal.comfoconnect.misc.HexConverter;
-import org.openhab.binding.comfoair.internal.comfoconnect.misc.SensorDataHandler;
-import org.openhab.binding.comfoair.internal.comfoconnect.misc.SensorDataHandlerImpl;
+import org.openhab.binding.comfoair.internal.comfoconnect.misc.SensorManagerImpl;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingStatus;
@@ -55,7 +54,7 @@ public class ComfoConnectHandler extends BaseThingHandler {
     private @Nullable ComfoConnectConnector connector;
     private @Nullable ComfoConnectProtocolHandler protocolHandler;
     private final Gateway gateway = new Gateway();
-    private @Nullable SensorDataHandler sensorDataHandler;
+    private @Nullable SensorManagerImpl sensorManager;
 
     private @Nullable MessageQueue messageQueue;
     private @Nullable BypassStateWorker bypassStateWorker;
@@ -174,9 +173,7 @@ public class ComfoConnectHandler extends BaseThingHandler {
                 handler);
         this.channelManager = new ChannelManagerImpl(handler, getThing(), this::isLinked, bypassStateWorker,
                 this::isConnected, this::updateState);
-        this.sensorDataHandler = new SensorDataHandlerImpl(
-                sensor -> this.channelManager != null && this.channelManager.isSensorSubscribed(sensor),
-                channelManager);
+        this.sensorManager = handler.getSensorManager();
 
         scheduler.submit(this::connect);
     }
@@ -200,9 +197,9 @@ public class ComfoConnectHandler extends BaseThingHandler {
             logger.debug("TCP connection established, initializing protocol");
 
             // Register sensor data callback before protocol initialization
-            SensorDataHandler dataHandler = this.sensorDataHandler;
-            if (dataHandler != null) {
-                protocolHandler.setSensorCallback(dataHandler::handleSensorData);
+            SensorManagerImpl sensorMgr = this.sensorManager;
+            if (sensorMgr != null) {
+                protocolHandler.setSensorCallback(sensorMgr::handleSensorData);
             }
 
             // Register keep-alive failure callback
@@ -316,8 +313,15 @@ public class ComfoConnectHandler extends BaseThingHandler {
             channelMgr.clearSubscriptions();
         }
 
+        // Clear subscribed sensors in sensor manager
+        SensorManagerImpl sensorMgr = this.sensorManager;
+        if (sensorMgr != null) {
+            sensorMgr.clearSubscriptions();
+        }
+
         this.connector = null;
         this.protocolHandler = null;
+        this.sensorManager = null;
     }
 
     /**

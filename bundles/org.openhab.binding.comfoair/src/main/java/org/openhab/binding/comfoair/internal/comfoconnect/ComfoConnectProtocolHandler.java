@@ -27,8 +27,7 @@ import org.openhab.binding.comfoair.internal.comfoconnect.component.KeepAliveWor
 import org.openhab.binding.comfoair.internal.comfoconnect.misc.HexConverter;
 import org.openhab.binding.comfoair.internal.comfoconnect.misc.ParsedFrame;
 import org.openhab.binding.comfoair.internal.comfoconnect.misc.SensorDataCallback;
-import org.openhab.binding.comfoair.internal.comfoconnect.misc.SensorSubscriptionManager;
-import org.openhab.binding.comfoair.internal.comfoconnect.misc.SensorSubscriptionManagerImpl;
+import org.openhab.binding.comfoair.internal.comfoconnect.misc.SensorManagerImpl;
 import org.openhab.binding.comfoair.internal.comfoconnect.response.Payload;
 import org.openhab.binding.comfoair.internal.comfoconnect.sensor.Sensor;
 import org.openhab.binding.comfoair.internal.comfoconnect.sensor.SensorValueType;
@@ -69,7 +68,7 @@ public class ComfoConnectProtocolHandler {
     private final ComfoConnectConnector connector;
     private final ScheduledExecutorService scheduler;
     private final HexConverter hexConverter = new HexConverter();
-    private final SensorSubscriptionManager sensorSubscriptionManager;
+    private final SensorManagerImpl sensorManager;
     private final RequestExecutor requestExecutor;
 
     // Session management fields
@@ -86,6 +85,15 @@ public class ComfoConnectProtocolHandler {
     private @Nullable Runnable connectionErrorCallback;
     private @Nullable KeepAliveWorker keepAliveWorker;
     private @Nullable Integer ventilationNodeId;
+
+    /**
+     * Get the sensor manager for external access.
+     *
+     * @return the sensor manager
+     */
+    public SensorManagerImpl getSensorManager() {
+        return sensorManager;
+    }
 
     /**
      * Container for pending request information.
@@ -123,7 +131,7 @@ public class ComfoConnectProtocolHandler {
         this.pinCode = pinCode;
         this.autoTakeover = autoTakeover;
         this.requestExecutor = request -> sendRequestWithRetry(request, byte[].class, REQUEST_TIMEOUT_SEC);
-        this.sensorSubscriptionManager = new SensorSubscriptionManagerImpl(connector, this::handleConnectionError);
+        this.sensorManager = new SensorManagerImpl(connector, this::handleConnectionError, null);
     }
 
     /**
@@ -703,7 +711,7 @@ public class ComfoConnectProtocolHandler {
      * @param sensorType the sensor data type (from SensorValueType)
      */
     public void subscribeToSensor(final Sensor sensor, final SensorValueType sensorType) {
-        sensorSubscriptionManager.subscribeToSensor(sensor, sensorType);
+        sensorManager.subscribeToSensor(sensor, sensorType);
     }
 
     /**
@@ -714,7 +722,7 @@ public class ComfoConnectProtocolHandler {
      * @param sensor the sensor to unsubscribe from
      */
     public void unsubscribeFromSensor(final Sensor sensor) {
-        sensorSubscriptionManager.unsubscribeFromSensor(sensor);
+        sensorManager.unsubscribeFromSensor(sensor);
     }
 
     /**
