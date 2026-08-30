@@ -143,14 +143,14 @@ public class Sensors {
 
         // Unit and temperature sensors
         sensors.add(new DecimalSensor(208, UnsignedByte, "unitTemperature"));
-        sensors.add(new DecimalSensor(209, SignedShort, "rmot").withTransformation(v -> v / 10.0));
+        sensors.add(new TenthDecimalSensor(209, SignedShort, "rmot"));
 
         // Season sensors
         sensors.add(new BooleanSensor(210, Boolean, "seasonHeatingActive"));
         sensors.add(new BooleanSensor(211, Boolean, "seasonCoolingActive"));
 
         // Target temperature
-        sensors.add(new DecimalSensor(212, SignedShort, "targetTemperature").withTransformation(v -> v / 10.0));
+        sensors.add(new TenthDecimalSensor(212, SignedShort, "targetTemperature"));
 
         // Avoided heating/cooling sensors
         sensors.add(new DecimalSensor(213, UnsignedShort, "avoidedHeating"));
@@ -201,10 +201,10 @@ public class Sensors {
         sensors.add(new BitmaskSensor(230, SignedLong, "airflowConstraints", airflowConstraintBits));
 
         // Temperature sensors
-        sensors.add(new DecimalSensor(221, SignedShort, "supplyAirTemperature").withTransformation(v -> v / 10.0));
-        sensors.add(new DecimalSensor(274, SignedShort, "extractAirTemperature").withTransformation(v -> v / 10.0));
-        sensors.add(new DecimalSensor(275, SignedShort, "exhaustAirTemperature").withTransformation(v -> v / 10.0));
-        sensors.add(new DecimalSensor(276, SignedShort, "outdoorAirTemperature").withTransformation(v -> v / 10.0));
+        sensors.add(new TenthDecimalSensor(221, SignedShort, "supplyAirTemperature"));
+        sensors.add(new TenthDecimalSensor(274, SignedShort, "extractAirTemperature"));
+        sensors.add(new TenthDecimalSensor(275, SignedShort, "exhaustAirTemperature"));
+        sensors.add(new TenthDecimalSensor(276, SignedShort, "outdoorAirTemperature"));
 
         // Unit airflow
         sensors.add(new DecimalSensor(224, UnsignedByte, "unitAirflow"));
@@ -227,20 +227,20 @@ public class Sensors {
         sensors.add(new DecimalSensor(343, UnsignedInt, "exhaustFanMode3"));
 
         // Analog input sensors
-        sensors.add(new DecimalSensor(369, UnsignedByte, "analogInput1").withTransformation(v -> v / 10.0));
-        sensors.add(new DecimalSensor(370, UnsignedByte, "analogInput2").withTransformation(v -> v / 10.0));
-        sensors.add(new DecimalSensor(371, UnsignedByte, "analogInput3").withTransformation(v -> v / 10.0));
-        sensors.add(new DecimalSensor(372, UnsignedByte, "analogInput4").withTransformation(v -> v / 10.0));
+        sensors.add(new TenthDecimalSensor(369, UnsignedByte, "analogInput1"));
+        sensors.add(new TenthDecimalSensor(370, UnsignedByte, "analogInput2"));
+        sensors.add(new TenthDecimalSensor(371, UnsignedByte, "analogInput3"));
+        sensors.add(new TenthDecimalSensor(372, UnsignedByte, "analogInput4"));
 
         // ComfoFond sensors
-        sensors.add(new DecimalSensor(416, SignedShort, "comfoFondTempOutdoor").withTransformation(v -> v / 10.0));
-        sensors.add(new DecimalSensor(417, SignedShort, "comfoFondTempGround").withTransformation(v -> v / 10.0));
+        sensors.add(new TenthDecimalSensor(416, SignedShort, "comfoFondTempOutdoor"));
+        sensors.add(new TenthDecimalSensor(417, SignedShort, "comfoFondTempGround"));
         sensors.add(new DecimalSensor(418, UnsignedByte, "comfoFondGheState"));
         sensors.add(new BooleanSensor(419, Boolean, "comfoFondGhePresent"));
 
         // ComfoCool sensors
         sensors.add(new DecimalSensor(784, UnsignedByte, "comfoCoolState"));
-        sensors.add(new DecimalSensor(802, SignedShort, "comfoCoolCondensorTemp").withTransformation(v -> v / 10.0));
+        sensors.add(new TenthDecimalSensor(802, SignedShort, "comfoCoolCondensorTemp"));
 
         return sensors;
     }

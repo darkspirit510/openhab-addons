@@ -122,11 +122,10 @@ class DecimalSensorTest {
     }
 
     @Test
-    @DisplayName("Apply transformation to extracted value")
-    void testValueAsStateWithTransformation() {
-        DecimalSensor sensor = new DecimalSensor(8, SensorValueType.UnsignedByte, "test-channel")
-                .withTransformation(value -> value / 10.0);
-        // Data bytes: value 100 (0x64) at byte 0, transformed to 10
+    @DisplayName("TenthDecimalSensor divides value by 10")
+    void testTenthDecimalSensorDividesBy10() {
+        TenthDecimalSensor sensor = new TenthDecimalSensor(8, SensorValueType.UnsignedByte, "test-channel");
+        // Data bytes: value 100 (0x64) at byte 0, divided by 10 = 10
         Zehnder.CnRpdoNotification message = Zehnder.CnRpdoNotification.newBuilder().setPdid(8)
                 .setData(com.google.protobuf.ByteString.copyFrom(new byte[] { 0x64 })).build();
 
@@ -136,8 +135,8 @@ class DecimalSensorTest {
     }
 
     @Test
-    @DisplayName("Use default identity transformation")
-    void testValueAsStateWithDefaultTransformation() {
+    @DisplayName("DecimalSensor returns raw value")
+    void testDecimalSensorReturnsRawValue() {
         DecimalSensor sensor = new DecimalSensor(9, SensorValueType.UnsignedByte, "test-channel");
         // Data bytes: value 10 (0x0A) at byte 0
         Zehnder.CnRpdoNotification message = Zehnder.CnRpdoNotification.newBuilder().setPdid(9)

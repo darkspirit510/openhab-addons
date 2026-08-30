@@ -22,16 +22,16 @@ import org.slf4j.LoggerFactory;
 import com.zehnder.proto.Zehnder;
 
 /**
- * Sensor implementation for numeric (decimal) values.
+ * Sensor implementation for numeric (decimal) values that need to be divided by 10.
  * Handles extraction from protobuf messages with proper byte order and data type conversion.
  *
  * @author Sascha Knoop - Initial contribution
  */
 @NonNullByDefault
-public class DecimalSensor extends Sensor {
-    private final Logger logger = LoggerFactory.getLogger(DecimalSensor.class);
+public class TenthDecimalSensor extends DecimalSensor {
+    private final Logger logger = LoggerFactory.getLogger(TenthDecimalSensor.class);
 
-    public DecimalSensor(int id, SensorValueType type, String channelId) {
+    public TenthDecimalSensor(int id, SensorValueType type, String channelId) {
         super(id, type, channelId);
     }
 
@@ -39,9 +39,11 @@ public class DecimalSensor extends Sensor {
     public @Nullable State valueAsState(Zehnder.CnRpdoNotification message) {
         byte[] payload = message.getData().toByteArray();
         double rawValue = extractValueFrom(payload).doubleValue();
+        double transformedValue = rawValue / 10.0;
 
-        logger.debug("Sensor {}: raw={}, payload_hex={}", channelId, rawValue, bytesToHex(payload));
+        logger.debug("Sensor {}: raw={}, transformed={}, payload_hex={}", channelId, rawValue, transformedValue,
+                bytesToHex(payload));
 
-        return new DecimalType(rawValue);
+        return new DecimalType(transformedValue);
     }
 }
