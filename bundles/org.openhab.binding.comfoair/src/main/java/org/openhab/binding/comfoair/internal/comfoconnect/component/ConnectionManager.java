@@ -10,7 +10,7 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  */
-package org.openhab.binding.comfoair.internal.comfoconnect.misc;
+package org.openhab.binding.comfoair.internal.comfoconnect.component;
 
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -28,9 +28,9 @@ import org.slf4j.LoggerFactory;
  * @author Sascha Knoop - Initial contribution
  */
 @NonNullByDefault
-public class ConnectionManagerImpl implements ConnectionManager {
+public class ConnectionManager {
 
-    private final Logger logger = LoggerFactory.getLogger(ConnectionManagerImpl.class);
+    private final Logger logger = LoggerFactory.getLogger(ConnectionManager.class);
 
     private static final int CONNECTION_ATTEMPT_DELAY_SEC = 5;
 
@@ -50,7 +50,7 @@ public class ConnectionManagerImpl implements ConnectionManager {
      * @param updateStatusOfflineConnectionErrorRunnable runnable to update status for connection error
      * @param protocolHandler the protocol handler (may be null initially)
      */
-    public ConnectionManagerImpl(final Runnable connectRunnable, final Runnable updateStatusOfflineKeepAliveRunnable,
+    public ConnectionManager(final Runnable connectRunnable, final Runnable updateStatusOfflineKeepAliveRunnable,
             final Runnable updateStatusOfflineConnectionErrorRunnable,
             final @Nullable ComfoConnectProtocolHandler protocolHandler) {
         this.connectRunnable = connectRunnable;
@@ -59,18 +59,15 @@ public class ConnectionManagerImpl implements ConnectionManager {
         this.protocolHandler = protocolHandler;
     }
 
-    @Override
     public void setScheduler(ScheduledExecutorService scheduler) {
         this.scheduler = scheduler;
     }
 
-    @Override
     public void connect() {
         // This method is not used in the current implementation
         // The connection is handled by the connectRunnable
     }
 
-    @Override
     public void scheduleReconnectAttempt() {
         ScheduledFuture<?> task = connectionRetryTask;
 
@@ -85,7 +82,6 @@ public class ConnectionManagerImpl implements ConnectionManager {
         }
     }
 
-    @Override
     public void cancelReconnectAttempt() {
         ScheduledFuture<?> task = connectionRetryTask;
         if (task != null) {

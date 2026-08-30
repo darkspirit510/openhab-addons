@@ -10,7 +10,7 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  */
-package org.openhab.binding.comfoair.internal.comfoconnect.misc;
+package org.openhab.binding.comfoair.internal.comfoconnect.component;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -22,7 +22,6 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.comfoair.internal.ComfoAirBindingConstants;
 import org.openhab.binding.comfoair.internal.comfoconnect.ComfoConnectProtocolHandler;
-import org.openhab.binding.comfoair.internal.comfoconnect.component.BypassStateWorker;
 import org.openhab.binding.comfoair.internal.comfoconnect.sensor.BitmaskSensor;
 import org.openhab.binding.comfoair.internal.comfoconnect.sensor.Sensor;
 import org.openhab.binding.comfoair.internal.comfoconnect.sensor.Sensors;
@@ -39,9 +38,9 @@ import org.slf4j.LoggerFactory;
  * @author Sascha Knoop - Initial contribution
  */
 @NonNullByDefault
-public class ChannelManagerImpl implements ChannelManager {
+public class ChannelManager {
 
-    private final Logger logger = LoggerFactory.getLogger(ChannelManagerImpl.class);
+    private final Logger logger = LoggerFactory.getLogger(ChannelManager.class);
 
     private final ComfoConnectProtocolHandler protocolHandler;
     private final Thing thing;
@@ -66,7 +65,7 @@ public class ChannelManagerImpl implements ChannelManager {
      * @param isConnectedSupplier supplier to check if connected
      * @param updateStateCallback callback to update channel state
      */
-    public ChannelManagerImpl(final ComfoConnectProtocolHandler protocolHandler, final Thing thing,
+    public ChannelManager(final ComfoConnectProtocolHandler protocolHandler, final Thing thing,
             final Predicate<ChannelUID> isLinkedPredicate, final @Nullable BypassStateWorker bypassStateWorker,
             final Supplier<Boolean> isConnectedSupplier, final BiConsumer<ChannelUID, State> updateStateCallback) {
         this.protocolHandler = protocolHandler;
@@ -77,7 +76,6 @@ public class ChannelManagerImpl implements ChannelManager {
         this.updateStateCallback = updateStateCallback;
     }
 
-    @Override
     public void channelLinked(final ChannelUID channelUID) {
         String channelId = channelUID.getId();
         // Find the channel object to get the sensor
@@ -116,7 +114,6 @@ public class ChannelManagerImpl implements ChannelManager {
                         () -> logger.warn("Channel {} linked but channel not found", channelId));
     }
 
-    @Override
     public void channelUnlinked(final ChannelUID channelUID) {
         logger.debug("Channel {} unlinked", channelUID.getId());
         String channelId = channelUID.getId();
@@ -159,7 +156,6 @@ public class ChannelManagerImpl implements ChannelManager {
                 }, () -> logger.debug("Channel {} unlinked but channel not found", channelId));
     }
 
-    @Override
     public void subscribeToLinkedChannels() {
         logger.debug("Discovering linked channels and subscribing to sensors");
 
@@ -189,7 +185,6 @@ public class ChannelManagerImpl implements ChannelManager {
         }
     }
 
-    @Override
     public void clearSubscriptions() {
         subscribedSensors.clear();
         linkedChannelCount = 0;

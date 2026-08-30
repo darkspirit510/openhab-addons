@@ -23,7 +23,6 @@ import org.eclipse.jdt.annotation.Nullable;
 @NonNullByDefault
 public class SearchGatewayResponse extends Response {
     private final String uuid;
-    private final String ipAddress;
 
     /**
      * Private constructor to enforce creation through the static factory method.
@@ -33,7 +32,6 @@ public class SearchGatewayResponse extends Response {
      */
     private SearchGatewayResponse(String uuid, String ipAddress) {
         this.uuid = uuid;
-        this.ipAddress = ipAddress;
     }
 
     /**
@@ -70,14 +68,5 @@ public class SearchGatewayResponse extends Response {
      */
     public String getUuid() {
         return uuid;
-    }
-
-    /**
-     * Gets the gateway IP address.
-     *
-     * @return the IP address string
-     */
-    public String getIpAddress() {
-        return ipAddress;
     }
 }

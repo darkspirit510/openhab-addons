@@ -10,7 +10,7 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  */
-package org.openhab.binding.comfoair.internal.comfoconnect.misc;
+package org.openhab.binding.comfoair.internal.comfoconnect.component;
 
 import java.io.IOException;
 import java.util.Map;
@@ -32,15 +32,15 @@ import org.slf4j.LoggerFactory;
 import com.zehnder.proto.Zehnder.CnRpdoNotification;
 
 /**
- * Manages sensor subscriptions and handles sensor data for ComfoConnect protocol.
+ * Handles sensor subscriptions and handles sensor data for ComfoConnect protocol.
  * Combines the functionality of the previous SensorDataHandler and SensorSubscriptionManager.
  *
  * @author Sascha Knoop - Initial contribution
  */
 @NonNullByDefault
-public class SensorManagerImpl {
+public class SensorHandler {
 
-    private final Logger logger = LoggerFactory.getLogger(SensorManagerImpl.class);
+    private final Logger logger = LoggerFactory.getLogger(SensorHandler.class);
 
     private final ComfoConnectConnector connector;
     private final Consumer<IOException> connectionErrorHandler;
@@ -55,7 +55,7 @@ public class SensorManagerImpl {
      * @param connectionErrorHandler handler for connection errors
      * @param channelManager the channel manager for state updates
      */
-    public SensorManagerImpl(final ComfoConnectConnector connector, final Consumer<IOException> connectionErrorHandler,
+    public SensorHandler(final ComfoConnectConnector connector, final Consumer<IOException> connectionErrorHandler,
             final @Nullable ChannelManager channelManager) {
         this.connector = connector;
         this.connectionErrorHandler = connectionErrorHandler;
@@ -160,5 +160,16 @@ public class SensorManagerImpl {
      */
     public void clearSubscriptions() {
         subscribedSensorIds.clear();
+    }
+
+    /**
+     * Called when sensor data is received from the gateway.
+     * Delegates to handleSensorData for processing.
+     *
+     * @param sensor the sensor object
+     * @param notification the protobuf message containing sensor data
+     */
+    public void onSensorDataReceived(final Sensor sensor, final CnRpdoNotification notification) {
+        handleSensorData(sensor, notification);
     }
 }

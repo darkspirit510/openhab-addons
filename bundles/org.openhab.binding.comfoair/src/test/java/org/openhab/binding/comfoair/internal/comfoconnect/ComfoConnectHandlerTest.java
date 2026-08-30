@@ -49,7 +49,7 @@ public class ComfoConnectHandlerTest {
         TestScheduler scheduler = new TestScheduler();
         protocolHandler = new ComfoConnectProtocolHandler(testConnector, 0, false, scheduler);
         testCallback = new TestSensorCallback();
-        protocolHandler.setSensorCallback(testCallback);
+        protocolHandler.setSensorHandler(testCallback);
     }
 
     static Stream<Arguments> sensorPayloadsAndStates() {

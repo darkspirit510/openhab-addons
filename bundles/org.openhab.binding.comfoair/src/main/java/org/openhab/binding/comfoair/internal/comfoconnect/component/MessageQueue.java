@@ -36,7 +36,7 @@ import com.zehnder.proto.Zehnder.GatewayOperation.OperationType;
  * @author Sascha Knoop - Initial contribution
  */
 @NonNullByDefault
-public class MessageQueue implements MessageQueueManager, MessageConsumer {
+public class MessageQueue {
 
     private final Logger logger = LoggerFactory.getLogger(MessageQueue.class);
 
@@ -48,11 +48,9 @@ public class MessageQueue implements MessageQueueManager, MessageConsumer {
     private final ComfoConnectProtocolHandler protocolHandler;
     private final ScheduledExecutorService scheduler;
 
-    // Message queue management
     private final BlockingQueue<byte[]> messageQueue;
     private volatile boolean isShutdown = false;
 
-    // Message consumer
     private @Nullable Future<?> messageConsumerTask;
 
     /**
@@ -74,8 +72,6 @@ public class MessageQueue implements MessageQueueManager, MessageConsumer {
         this.scheduler = scheduler;
         this.messageQueue = new LinkedBlockingQueue<>(DEFAULT_QUEUE_CAPACITY);
     }
-
-    // ========== Message Sending Methods (existing functionality) ==========
 
     public void sendMessage(final byte[] message) throws IOException {
         connector.sendMessage(message);
@@ -146,9 +142,6 @@ public class MessageQueue implements MessageQueueManager, MessageConsumer {
         }
     }
 
-    // ========== Message Queue Management Methods (from MessageQueueManagerImpl) ==========
-
-    @Override
     public boolean queueMessage(final byte[] message) {
         if (isShutdown) {
             return false;
@@ -157,7 +150,6 @@ public class MessageQueue implements MessageQueueManager, MessageConsumer {
         return messageQueue.offer(message);
     }
 
-    @Override
     public byte @Nullable [] getNextMessage() {
         try {
             byte[] message = messageQueue.take();
@@ -172,7 +164,6 @@ public class MessageQueue implements MessageQueueManager, MessageConsumer {
         }
     }
 
-    @Override
     public byte @Nullable [] pollMessage(final long timeoutMs) {
         try {
             return messageQueue.poll(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS);
@@ -184,19 +175,14 @@ public class MessageQueue implements MessageQueueManager, MessageConsumer {
         }
     }
 
-    @Override
     public void clearQueue() {
         messageQueue.clear();
     }
 
-    @Override
     public void setShutdown(final boolean shutdown) {
         this.isShutdown = shutdown;
     }
 
-    // ========== Message Consumer Methods (from MessageConsumerImpl) ==========
-
-    @Override
     public void startMessageConsumer() {
         logger.debug("Starting message consumer loop");
 
@@ -217,7 +203,6 @@ public class MessageQueue implements MessageQueueManager, MessageConsumer {
         });
     }
 
-    @Override
     public void stopMessageConsumer() {
         Future<?> task = messageConsumerTask;
         if (task != null) {

@@ -24,10 +24,9 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.comfoair.internal.comfoconnect.component.Gateway;
 import org.openhab.binding.comfoair.internal.comfoconnect.component.KeepAliveWorker;
+import org.openhab.binding.comfoair.internal.comfoconnect.component.SensorHandler;
 import org.openhab.binding.comfoair.internal.comfoconnect.misc.HexConverter;
 import org.openhab.binding.comfoair.internal.comfoconnect.misc.ParsedFrame;
-import org.openhab.binding.comfoair.internal.comfoconnect.misc.SensorDataCallback;
-import org.openhab.binding.comfoair.internal.comfoconnect.misc.SensorManagerImpl;
 import org.openhab.binding.comfoair.internal.comfoconnect.response.Payload;
 import org.openhab.binding.comfoair.internal.comfoconnect.sensor.Sensor;
 import org.openhab.binding.comfoair.internal.comfoconnect.sensor.SensorValueType;
@@ -68,20 +67,17 @@ public class ComfoConnectProtocolHandler {
     private final ComfoConnectConnector connector;
     private final ScheduledExecutorService scheduler;
     private final HexConverter hexConverter = new HexConverter();
-    private final SensorManagerImpl sensorManager;
+    private final SensorHandler sensorManager;
     private final RequestExecutor requestExecutor;
 
-    // Session management fields
     private final int pinCode;
     private final boolean autoTakeover;
     private volatile boolean sessionActive = false;
 
-    // Request management fields
     private volatile int nextReference = 1;
     private final Map<Integer, PendingRequest<?>> pendingRequests = new HashMap<>();
 
-    // Message dispatcher fields
-    private @Nullable SensorDataCallback sensorCallback;
+    private @Nullable SensorHandler sensorHandler;
     private @Nullable Runnable connectionErrorCallback;
     private @Nullable KeepAliveWorker keepAliveWorker;
     private @Nullable Integer ventilationNodeId;
@@ -91,7 +87,7 @@ public class ComfoConnectProtocolHandler {
      *
      * @return the sensor manager
      */
-    public SensorManagerImpl getSensorManager() {
+    public SensorHandler getSensorManager() {
         return sensorManager;
     }
 
@@ -131,16 +127,16 @@ public class ComfoConnectProtocolHandler {
         this.pinCode = pinCode;
         this.autoTakeover = autoTakeover;
         this.requestExecutor = request -> sendRequestWithRetry(request, byte[].class, REQUEST_TIMEOUT_SEC);
-        this.sensorManager = new SensorManagerImpl(connector, this::handleConnectionError, null);
+        this.sensorManager = new SensorHandler(connector, this::handleConnectionError, null);
     }
 
     /**
-     * Set the sensor data callback for receiving sensor updates.
+     * Set the sensor data handler for receiving sensor updates.
      *
-     * @param callback the callback to invoke when sensor data arrives, or null to unregister
+     * @param handler the handler to invoke when sensor data arrives, or null to unregister
      */
-    public void setSensorCallback(final @Nullable SensorDataCallback callback) {
-        this.sensorCallback = callback;
+    public void setSensorHandler(final @Nullable SensorHandler handler) {
+        this.sensorHandler = handler;
     }
 
     /**
@@ -653,10 +649,9 @@ public class ComfoConnectProtocolHandler {
             logger.info("RPDO notification for sensor: {}", sensor);
 
             // Route to appropriate handler based on sensor ID
-            SensorDataCallback callback = sensorCallback;
 
-            if (callback != null) {
-                callback.onSensorDataReceived(sensor, notification);
+            if (sensorHandler != null) {
+                sensorHandler.onSensorDataReceived(sensor, notification);
             }
         } catch (Exception e) {
             logger.error("Error handling RPDO notification: {}", e.getMessage(), e);
@@ -687,15 +682,14 @@ public class ComfoConnectProtocolHandler {
             logger.debug("RMI response state value: {}", state);
 
             // Route to the sensor callback for bypass state
-            SensorDataCallback callback = sensorCallback;
 
-            if (callback != null) {
+            if (sensorHandler != null) {
                 // Use the BYPASS_STATE sensor (if defined)
                 Sensors.findByChannelId("bypassState").ifPresent(sensor -> {
                     // Create a pseudo-RPDO notification for the sensor callback
                     Zehnder.CnRpdoNotification message = Zehnder.CnRpdoNotification.newBuilder().setPdid(sensor.id)
                             .setData(com.google.protobuf.ByteString.copyFrom(new byte[] { (byte) state })).build();
-                    callback.onSensorDataReceived(sensor, message);
+                    sensorHandler.onSensorDataReceived(sensor, message);
                 });
             }
         } catch (Exception e) {

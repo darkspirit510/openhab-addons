@@ -12,7 +12,7 @@
  */
 package org.openhab.binding.comfoair.internal.comfoconnect;
 
-import org.openhab.binding.comfoair.internal.comfoconnect.misc.SensorDataCallback;
+import org.openhab.binding.comfoair.internal.comfoconnect.component.SensorHandler;
 import org.openhab.binding.comfoair.internal.comfoconnect.sensor.Sensor;
 
 import com.zehnder.proto.Zehnder;
@@ -22,17 +22,27 @@ import com.zehnder.proto.Zehnder;
  *
  * @author Sascha Knoop - Initial contribution
  */
-public class TestSensorCallback implements SensorDataCallback {
+public class TestSensorCallback extends SensorHandler {
 
     private Sensor sensor;
     private Zehnder.CnRpdoNotification message;
     private boolean called = false;
+
+    public TestSensorCallback() {
+        super(null, null, null);
+    }
 
     @Override
     public void onSensorDataReceived(Sensor sensor, Zehnder.CnRpdoNotification message) {
         this.sensor = sensor;
         this.message = message;
         this.called = true;
+    }
+
+    @Override
+    public boolean isSensorSubscribed(Sensor sensor) {
+        // For testing, always return true so all sensor data is processed
+        return true;
     }
 
     public boolean wasCalled() {
